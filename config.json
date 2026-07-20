@@ -6,6 +6,7 @@
   },
   "hud": {
     "match_threshold": 0.65,
+    "absent_threshold": 0.35,
     "roi_bottom": 1.0,
     "roi_left": 0.0,
     "roi_right": 0.25,
@@ -31,7 +32,7 @@
     "upscale_min_height": 360
   },
   "state_machine": {
-    "hud_missing_frames_to_die": 3,
+    "hud_missing_frames_to_die": 8,
     "result_confirm_frames": 2
   },
   "video": {

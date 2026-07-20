@@ -1,6 +1,7 @@
 #include "detection/hud_detector.h"
 #include "core/logger.h"
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
 #include <algorithm>
 
 namespace csn {
@@ -14,6 +15,19 @@ PixelRect ToPixelRect(const RationalRect& r, int w, int h) {
     pr.right = static_cast<int>(r.right * w);
     pr.bottom = static_cast<int>(r.bottom * h);
     return pr;
+}
+
+// Mild local-contrast enhancement. CODM darkens the whole screen as the
+// player takes damage; on a low-health bar (already hollow/dark) this crushes
+// its contrast against the background and makes the template match score
+// collapse. CLAHE restores local contrast so the bar stays recognisable.
+void EnhanceContrast(cv::Mat& m) {
+    try {
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+        clahe->apply(m, m);
+    } catch (...) {
+        // best effort; keep the original image on failure
+    }
 }
 
 } // namespace
@@ -32,6 +46,7 @@ void HudDetector::SetTemplates(const std::vector<std::string>& paths) {
         if (t.empty()) {
             CSN_LOG_ERROR("Failed to load HUD template: " + p);
         } else {
+            EnhanceContrast(t);  // match the live ROI preprocessing
             templates_.push_back(t);
             CSN_LOG_INFO("Loaded HUD template: " + p + " " + std::to_string(t.cols) + "x" + std::to_string(t.rows));
         }
@@ -40,6 +55,10 @@ void HudDetector::SetTemplates(const std::vector<std::string>& paths) {
 
 void HudDetector::SetThreshold(double threshold) {
     threshold_ = threshold;
+}
+
+void HudDetector::SetAbsentThreshold(double threshold) {
+    absent_threshold_ = threshold;
 }
 
 void HudDetector::SetRoi(const RationalRect& roi) {
@@ -75,6 +94,8 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
             cv::resize(gray, gray, cv::Size(canonical_w_, canonical_h_), 0, 0, cv::INTER_LINEAR);
         }
 
+        EnhanceContrast(gray);
+
         double best = 0.0;
         for (const auto& t : templates_) {
             if (t.cols > gray.cols || t.rows > gray.rows) continue;
@@ -86,8 +107,21 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
             if (maxVal > best) best = maxVal;
         }
 
+        // Hysteresis: require a confident score to *enter* Present, but only
+        // drop to Absent once the score falls well below that. This stops the
+        // low-health "damage darkening" from flickering HUD -> Absent (which
+        // would falsely trigger the death/video switch) while still detecting
+        // genuine disappearance (death cam / round-end screen, score ~0.1-0.3).
+        bool present;
+        if (present_state_) {
+            present = (best >= absent_threshold_);
+        } else {
+            present = (best >= threshold_);
+        }
+        present_state_ = present;
+
         result.confidence = best;
-        result.presence = (best >= threshold_) ? HudResult::Presence::Present : HudResult::Presence::Absent;
+        result.presence = present ? HudResult::Presence::Present : HudResult::Presence::Absent;
         return result;
     } catch (const std::exception& e) {
         CSN_LOG_ERROR("HUD detection exception: " + std::string(e.what()));

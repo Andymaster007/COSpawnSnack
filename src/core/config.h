@@ -17,6 +17,12 @@ struct Config {
         "assets/templates/hud_bar_segments_low.png"
     };
     double hud_match_threshold = 0.65;
+    // Hysteresis lower bound for the HUD-present decision. Once the HUD is
+    // judged Present it stays Present until the match score drops below this
+    // value. This prevents the "damage darkening" effect (low health crushes
+    // the bar's contrast) from flickering the HUD to Absent while the player
+    // is still alive. Set well below hud_match_threshold.
+    double hud_absent_threshold = 0.35;
 
     RationalRect result_roi{0.30, 0.22, 0.70, 0.52};
     std::vector<std::string> result_keywords = {"胜利", "战败", "失败", "VICTORY", "DEFEAT"};
@@ -26,7 +32,7 @@ struct Config {
     // device resolutions (text is tiny on low-res windows otherwise).
     int result_upscale_min_height = 360;
 
-    int hud_missing_frames_to_die = 3;
+    int hud_missing_frames_to_die = 8;
     int result_confirm_frames = 2;
 
     std::string video_target = "chrome_douyin";
