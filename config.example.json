@@ -11,10 +11,10 @@
     "roi_bottom": 1.0,
     "template_paths": [
       "assets/templates/hud_bar_segments_full.png",
+      "assets/templates/hud_bar_segments_half.png",
       "assets/templates/hud_bar_segments_low.png"
     ],
-    "match_threshold": 0.65,
-    "absent_threshold": 0.35
+    "match_threshold": 0.65
   },
   "result": {
     "roi_left": 0.30,
@@ -26,7 +26,7 @@
     "upscale_min_height": 360
   },
   "state_machine": {
-    "hud_missing_frames_to_die": 8,
+    "hud_missing_frames_to_die": 3,
     "result_confirm_frames": 2
   },
   "video": {

@@ -44,7 +44,6 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.hud_roi = ParseRect(hud);
         out.hud_template_paths = hud.value("template_paths", std::vector<std::string>{});
         out.hud_match_threshold = hud.value("match_threshold", 0.65);
-        out.hud_absent_threshold = hud.value("absent_threshold", 0.35);
 
         const auto& res = j.value("result", nlohmann::json::object());
         out.result_roi = ParseRect(res);
@@ -53,7 +52,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.result_upscale_min_height = res.value("upscale_min_height", 360);
 
         const auto& sm = j.value("state_machine", nlohmann::json::object());
-        out.hud_missing_frames_to_die = sm.value("hud_missing_frames_to_die", 8);
+        out.hud_missing_frames_to_die = sm.value("hud_missing_frames_to_die", 3);
         out.result_confirm_frames = sm.value("result_confirm_frames", 2);
 
         const auto& vid = j.value("video", nlohmann::json::object());
@@ -82,7 +81,6 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         j["hud"] = RectToJson(cfg.hud_roi);
         j["hud"]["template_paths"] = cfg.hud_template_paths;
         j["hud"]["match_threshold"] = cfg.hud_match_threshold;
-        j["hud"]["absent_threshold"] = cfg.hud_absent_threshold;
 
         j["result"] = RectToJson(cfg.result_roi);
         j["result"]["keywords"] = cfg.result_keywords;
