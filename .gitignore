@@ -34,5 +34,12 @@
 config.local.json
 *.env
 
+# CLion project files
+/.idea/
+/cmake-build-*/
+
+# Local agent memory (not part of the project deliverable)
+/.workbuddy/
+
 # Game dir is huge and external; never commit it
 /CODMGameApps/

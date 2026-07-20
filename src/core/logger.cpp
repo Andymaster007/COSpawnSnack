@@ -42,6 +42,16 @@ void Logger::Info(const std::string& msg) {
     }
 }
 
+void Logger::Warn(const std::string& msg) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string line = FormatWithTimestamp("WARN", msg);
+    std::cout << line << "\n";
+    if (has_file_) {
+        std::ofstream f(path_, std::ios::app);
+        if (f) f << line << "\n";
+    }
+}
+
 void Logger::Error(const std::string& msg) {
     std::lock_guard<std::mutex> lock(mutex_);
     std::string line = FormatWithTimestamp("ERROR", msg);
