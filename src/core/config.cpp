@@ -1,4 +1,5 @@
 #include "core/config.h"
+#include "core/logger.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
@@ -25,8 +26,11 @@ static nlohmann::json RectToJson(const RationalRect& r) {
 }
 
 bool LoadConfig(const fs::path& path, Config& out) {
-    std::ifstream f(path);
-    if (!f) return false;
+    std::ifstream f(path.string());
+    if (!f) {
+        CSN_LOG_ERROR("Failed to open config file: " + path.string());
+        return false;
+    }
     try {
         nlohmann::json j;
         f >> j;
@@ -59,7 +63,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
 
         out.diagnostic_mode = j.value("diagnostic_mode", false);
     } catch (const std::exception& e) {
-        std::cerr << "Config parse error: " << e.what() << "\n";
+        CSN_LOG_ERROR("Config parse error: " + std::string(e.what()));
         return false;
     }
     return true;
@@ -90,11 +94,14 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};
         j["diagnostic_mode"] = cfg.diagnostic_mode;
 
-        std::ofstream f(path);
-        if (!f) return false;
+        std::ofstream f(path.string());
+        if (!f) {
+            CSN_LOG_ERROR("Failed to write config file: " + path.string());
+            return false;
+        }
         f << j.dump(2);
     } catch (const std::exception& e) {
-        std::cerr << "Config save error: " << e.what() << "\n";
+        CSN_LOG_ERROR("Config save error: " + std::string(e.what()));
         return false;
     }
     return true;

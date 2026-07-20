@@ -92,70 +92,82 @@ void ResultDetector::DetectImplInit() {
 }
 
 ResultText ResultDetector::Detect(const cv::Mat& frame) {
-    ResultText result;
-    if (frame.empty()) return result;
+    try {
+        ResultText result;
+        if (frame.empty()) return result;
 
-    if (!ocr_initialized_) DetectImplInit();
-    if (!engine_) return result;
+        if (!ocr_initialized_) DetectImplInit();
+        if (!engine_) return result;
 
-    PixelRect pr = ToPixelRect(roi_, frame.cols, frame.rows);
-    int x = std::clamp(pr.left, 0, frame.cols - 1);
-    int y = std::clamp(pr.top, 0, frame.rows - 1);
-    int rw = std::clamp(pr.right - pr.left, 1, frame.cols - x);
-    int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
-    cv::Mat roi = frame(cv::Rect(x, y, rw, rh));
+        PixelRect pr = ToPixelRect(roi_, frame.cols, frame.rows);
+        int x = std::clamp(pr.left, 0, frame.cols - 1);
+        int y = std::clamp(pr.top, 0, frame.rows - 1);
+        int rw = std::clamp(pr.right - pr.left, 1, frame.cols - x);
+        int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
+        cv::Mat roi = frame(cv::Rect(x, y, rw, rh));
 
-    // Resolution independence: on low-res windows the result text is only a
-    // few pixels tall and OCR misses it. Upscale the ROI so its height reaches
-    // at least `upscale_min_height_` before recognition. The ROI position is
-    // already resolution-independent (screen percentages), this only fixes
-    // the text pixel size.
-    if (roi.rows < upscale_min_height_ && roi.rows > 0) {
-        const double s = static_cast<double>(upscale_min_height_) / roi.rows;
-        cv::Mat up;
-        cv::resize(roi, up, cv::Size(), s, s, cv::INTER_LINEAR);
-        roi = up;
-    }
-
-    // OpenCV BGR -> BGRA8 (the format Windows.Media.Ocr expects).
-    cv::Mat bgra;
-    if (roi.channels() == 3) {
-        cv::cvtColor(roi, bgra, cv::COLOR_BGR2BGRA);
-    } else if (roi.channels() == 4) {
-        bgra = roi;
-    } else {
-        return result;  // unsupported layout
-    }
-
-    SoftwareBitmap bitmap(BitmapPixelFormat::Bgra8, bgra.cols, bgra.rows);
-    auto buffer = bitmap.LockBuffer(BitmapBufferAccessMode::ReadWrite);
-    auto reference = buffer.CreateReference();
-    // IMemoryBufferReference exposes data()/Capacity(), backed by IMemoryBufferByteAccess.
-    uint8_t* dst = reference.data();
-    const uint32_t capacity = reference.Capacity();
-    const size_t need = static_cast<size_t>(bgra.total()) * bgra.channels();
-    if (capacity < need) return result;
-    memcpy(dst, bgra.data, need);
-    // `reference`/`buffer` go out of scope here and unlock the bitmap.
-
-    auto ocrResult = engine_.RecognizeAsync(bitmap).get();
-
-    std::wstring wtext;
-    for (auto const& line : ocrResult.Lines()) {
-        wtext += line.Text().c_str();
-        wtext += L'\n';
-    }
-    std::string text = RemoveWhitespace(ToLower(WStringToUtf8(wtext)));
-
-    for (auto const& kw : keywords_) {
-        if (text.find(ToLower(kw)) != std::string::npos) {
-            result.found = true;
-            result.matched_keyword = kw;
-            result.confidence = std::max(threshold_, 1.0);  // OCR API has no per-match score
-            break;
+        // Resolution independence: on low-res windows the result text is only a
+        // few pixels tall and OCR misses it. Upscale the ROI so its height reaches
+        // at least `upscale_min_height_` before recognition. The ROI position is
+        // already resolution-independent (screen percentages), this only fixes
+        // the text pixel size.
+        if (roi.rows < upscale_min_height_ && roi.rows > 0) {
+            const double s = static_cast<double>(upscale_min_height_) / roi.rows;
+            cv::Mat up;
+            cv::resize(roi, up, cv::Size(), s, s, cv::INTER_LINEAR);
+            roi = up;
         }
+
+        // OpenCV BGR -> BGRA8 (the format Windows.Media.Ocr expects).
+        cv::Mat bgra;
+        if (roi.channels() == 3) {
+            cv::cvtColor(roi, bgra, cv::COLOR_BGR2BGRA);
+        } else if (roi.channels() == 4) {
+            bgra = roi;
+        } else {
+            return result;  // unsupported layout
+        }
+
+        SoftwareBitmap bitmap(BitmapPixelFormat::Bgra8, bgra.cols, bgra.rows);
+        {
+            // Lock the bitmap, copy the OpenCV data into it, and release the
+            // lock *before* calling RecognizeAsync. Keeping the buffer locked
+            // while OCR reads the SoftwareBitmap can trigger an exception.
+            auto buffer = bitmap.LockBuffer(BitmapBufferAccessMode::ReadWrite);
+            auto reference = buffer.CreateReference();
+            // IMemoryBufferReference exposes data()/Capacity(), backed by IMemoryBufferByteAccess.
+            uint8_t* dst = reference.data();
+            const uint32_t capacity = reference.Capacity();
+            const size_t need = static_cast<size_t>(bgra.total()) * bgra.channels();
+            if (capacity < need) return result;
+            memcpy(dst, bgra.data, need);
+        } // buffer/reference unlocked here
+
+        auto ocrResult = engine_.RecognizeAsync(bitmap).get();
+
+        std::wstring wtext;
+        for (auto const& line : ocrResult.Lines()) {
+            wtext += line.Text().c_str();
+            wtext += L'\n';
+        }
+        std::string text = RemoveWhitespace(ToLower(WStringToUtf8(wtext)));
+
+        for (auto const& kw : keywords_) {
+            if (text.find(ToLower(kw)) != std::string::npos) {
+                result.found = true;
+                result.matched_keyword = kw;
+                result.confidence = std::max(threshold_, 1.0);  // OCR API has no per-match score
+                break;
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        CSN_LOG_ERROR("OCR detection exception: " + std::string(e.what()));
+        return ResultText{};
+    } catch (...) {
+        CSN_LOG_ERROR("OCR detection unknown exception.");
+        return ResultText{};
     }
-    return result;
 }
 
 } // namespace csn

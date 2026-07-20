@@ -63,47 +63,59 @@ void HudDetector::RebuildScaledTemplates() {
 }
 
 HudResult HudDetector::Detect(const cv::Mat& frame) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    HudResult result;
-    if (templates_.empty() || frame.empty()) {
-        result.presence = HudResult::Presence::Unknown;
+    try {
+        std::lock_guard<std::mutex> lock(mutex_);
+        HudResult result;
+        if (templates_.empty() || frame.empty()) {
+            result.presence = HudResult::Presence::Unknown;
+            return result;
+        }
+
+        PixelRect pr = ToPixelRect(roi_, frame.cols, frame.rows);
+        int x = std::clamp(pr.left, 0, frame.cols - 1);
+        int y = std::clamp(pr.top, 0, frame.rows - 1);
+        int rw = std::clamp(pr.right - pr.left, 1, frame.cols - x);
+        int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
+        cv::Rect roi(x, y, rw, rh);
+
+        cv::Mat gray;
+        cv::cvtColor(frame(roi), gray, cv::COLOR_BGR2GRAY);
+
+        // Resolution independence: resample the live ROI crop to the canonical
+        // canvas, and compare against the templates (already resampled to the
+        // same canvas in SetRoi/SetTemplates). Because the ROI is defined in
+        // screen percentages and CODM is fixed 16:9, the bar lands at the same
+        // fractional position on every device -> the normalized images align.
+        const auto& candidates = canonical_valid_ ? scaled_templates_ : templates_;
+        if (canonical_valid_) {
+            cv::resize(gray, gray, cv::Size(canonical_w_, canonical_h_), 0, 0, cv::INTER_LINEAR);
+        }
+
+        double best = 0.0;
+        for (const auto& t : candidates) {
+            if (t.cols > gray.cols || t.rows > gray.rows) continue;
+            cv::Mat res;
+            cv::matchTemplate(gray, t, res, cv::TM_CCOEFF_NORMED);
+            double minVal = 0.0, maxVal = 0.0;
+            cv::Point minLoc, maxLoc;
+            cv::minMaxLoc(res, &minVal, &maxVal, &minLoc, &maxLoc);
+            if (maxVal > best) best = maxVal;
+        }
+
+        result.confidence = best;
+        result.presence = (best >= threshold_) ? HudResult::Presence::Present : HudResult::Presence::Absent;
         return result;
+    } catch (const std::exception& e) {
+        CSN_LOG_ERROR("HUD detection exception: " + std::string(e.what()));
+        HudResult r;
+        r.presence = HudResult::Presence::Unknown;
+        return r;
+    } catch (...) {
+        CSN_LOG_ERROR("HUD detection unknown exception.");
+        HudResult r;
+        r.presence = HudResult::Presence::Unknown;
+        return r;
     }
-
-    PixelRect pr = ToPixelRect(roi_, frame.cols, frame.rows);
-    int x = std::clamp(pr.left, 0, frame.cols - 1);
-    int y = std::clamp(pr.top, 0, frame.rows - 1);
-    int rw = std::clamp(pr.right - pr.left, 1, frame.cols - x);
-    int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
-    cv::Rect roi(x, y, rw, rh);
-
-    cv::Mat gray;
-    cv::cvtColor(frame(roi), gray, cv::COLOR_BGR2GRAY);
-
-    // Resolution independence: resample the live ROI crop to the canonical
-    // canvas, and compare against the templates (already resampled to the
-    // same canvas in SetRoi/SetTemplates). Because the ROI is defined in
-    // screen percentages and CODM is fixed 16:9, the bar lands at the same
-    // fractional position on every device -> the normalized images align.
-    const auto& candidates = canonical_valid_ ? scaled_templates_ : templates_;
-    if (canonical_valid_) {
-        cv::resize(gray, gray, cv::Size(canonical_w_, canonical_h_), 0, 0, cv::INTER_LINEAR);
-    }
-
-    double best = 0.0;
-    for (const auto& t : candidates) {
-        if (t.cols > gray.cols || t.rows > gray.rows) continue;
-        cv::Mat res;
-        cv::matchTemplate(gray, t, res, cv::TM_CCOEFF_NORMED);
-        double minVal = 0.0, maxVal = 0.0;
-        cv::Point minLoc, maxLoc;
-        cv::minMaxLoc(res, &minVal, &maxVal, &minLoc, &maxLoc);
-        if (maxVal > best) best = maxVal;
-    }
-
-    result.confidence = best;
-    result.presence = (best >= threshold_) ? HudResult::Presence::Present : HudResult::Presence::Absent;
-    return result;
 }
 
 } // namespace csn

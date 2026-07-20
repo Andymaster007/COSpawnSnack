@@ -45,17 +45,23 @@ void ScreenCapture::Stop() {
 bool ScreenCapture::IsRunning() const { return running_; }
 
 void ScreenCapture::ThreadMain() {
-    // Initialize a multi-threaded WinRT apartment for this thread. Both the WGC
-    // callback (OCR runs on the capture thread) and Windows.Media.Ocr need it.
-    init_apartment(apartment_type::multi_threaded);
+    try {
+        // Initialize a multi-threaded WinRT apartment for this thread. Both the WGC
+        // callback (OCR runs on the capture thread) and Windows.Media.Ocr need it.
+        init_apartment(apartment_type::multi_threaded);
 
-    if (InitWgc()) {
-        CSN_LOG_INFO("Screen capture started (WGC / Windows Graphics Capture).");
-        WgcLoop();
-        CleanupWgc();
-    } else {
-        CSN_LOG_WARN("WGC unavailable; falling back to BitBlt capture.");
-        BitBltLoop();
+        if (InitWgc()) {
+            CSN_LOG_INFO("Screen capture started (WGC / Windows Graphics Capture).");
+            WgcLoop();
+            CleanupWgc();
+        } else {
+            CSN_LOG_WARN("WGC unavailable; falling back to BitBlt capture.");
+            BitBltLoop();
+        }
+    } catch (const std::exception& e) {
+        CSN_LOG_ERROR("Capture thread fatal exception: " + std::string(e.what()));
+    } catch (...) {
+        CSN_LOG_ERROR("Capture thread fatal unknown exception.");
     }
     CSN_LOG_INFO("Screen capture stopped.");
 }
@@ -135,57 +141,63 @@ void ScreenCapture::CleanupWgc() {
 
 void ScreenCapture::OnFrameArrived(const Direct3D11CaptureFramePool& sender,
                                    const winrt::Windows::Foundation::IInspectable&) {
-    auto frame = sender.TryGetNextFrame();
-    if (!frame) return;
-    auto surface = frame.Surface();
-    if (!surface) return;
+    try {
+        auto frame = sender.TryGetNextFrame();
+        if (!frame) return;
+        auto surface = frame.Surface();
+        if (!surface) return;
 
-    // The winrt IDirect3DSurface exposes the underlying DXGI texture through the
-    // raw COM interface IDirect3DDxgiInterfaceAccess (global namespace, declared
-    // in the SDK's windows.graphics.directx.direct3d11.interop.h).
-    winrt::com_ptr<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess> access;
-    winrt::check_hresult(
-        reinterpret_cast<::IUnknown*>(winrt::get_abi(surface))
-            ->QueryInterface(
-                __uuidof(::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess),
-                access.put_void()));
-    if (!access) return;
+        // The winrt IDirect3DSurface exposes the underlying DXGI texture through the
+        // raw COM interface IDirect3DDxgiInterfaceAccess (global namespace, declared
+        // in the SDK's windows.graphics.directx.direct3d11.interop.h).
+        winrt::com_ptr<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess> access;
+        winrt::check_hresult(
+            reinterpret_cast<::IUnknown*>(winrt::get_abi(surface))
+                ->QueryInterface(
+                    __uuidof(::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess),
+                    access.put_void()));
+        if (!access) return;
 
-    winrt::com_ptr<ID3D11Texture2D> texture;
-    winrt::check_hresult(access->GetInterface(__uuidof(ID3D11Texture2D), texture.put_void()));
-    if (!texture) return;
+        winrt::com_ptr<ID3D11Texture2D> texture;
+        winrt::check_hresult(access->GetInterface(__uuidof(ID3D11Texture2D), texture.put_void()));
+        if (!texture) return;
 
-    D3D11_TEXTURE2D_DESC desc{};
-    texture->GetDesc(&desc);
-    if (desc.Width == 0 || desc.Height == 0) return;
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        if (desc.Width == 0 || desc.Height == 0) return;
 
-    D3D11_TEXTURE2D_DESC staged = desc;
-    staged.Usage = D3D11_USAGE_STAGING;
-    staged.BindFlags = 0;
-    staged.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    staged.MiscFlags = 0;
-    winrt::com_ptr<ID3D11Texture2D> staging;
-    HRESULT hr = d3dDevice_->CreateTexture2D(&staged, nullptr, staging.put());
-    if (FAILED(hr)) return;
-    d3dContext_->CopyResource(staging.get(), texture.get());
+        D3D11_TEXTURE2D_DESC staged = desc;
+        staged.Usage = D3D11_USAGE_STAGING;
+        staged.BindFlags = 0;
+        staged.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        staged.MiscFlags = 0;
+        winrt::com_ptr<ID3D11Texture2D> staging;
+        HRESULT hr = d3dDevice_->CreateTexture2D(&staged, nullptr, staging.put());
+        if (FAILED(hr)) return;
+        d3dContext_->CopyResource(staging.get(), texture.get());
 
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    hr = d3dContext_->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped);
-    if (FAILED(hr)) return;
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        hr = d3dContext_->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED(hr)) return;
 
-    const int w = static_cast<int>(desc.Width);
-    const int h = static_cast<int>(desc.Height);
-    cv::Mat bgra(h, w, CV_8UC4, mapped.pData, mapped.RowPitch);
-    cv::Mat bgr;
-    cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
+        const int w = static_cast<int>(desc.Width);
+        const int h = static_cast<int>(desc.Height);
+        cv::Mat bgra(h, w, CV_8UC4, mapped.pData, mapped.RowPitch);
+        cv::Mat bgr;
+        cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
 
-    {
-        std::lock_guard<std::mutex> lk(frameMutex_);
-        currentFrame_ = bgr;  // deep copy (bgra references mapped memory)
-        newFrame_ = true;
+        {
+            std::lock_guard<std::mutex> lk(frameMutex_);
+            currentFrame_ = bgr;  // deep copy (bgra references mapped memory)
+            newFrame_ = true;
+        }
+        d3dContext_->Unmap(staging.get(), 0);
+        frameCv_.notify_one();
+    } catch (const std::exception& e) {
+        CSN_LOG_ERROR("WGC frame callback exception: " + std::string(e.what()));
+    } catch (...) {
+        CSN_LOG_ERROR("WGC frame callback unknown exception.");
     }
-    d3dContext_->Unmap(staging.get(), 0);
-    frameCv_.notify_one();
 }
 
 void ScreenCapture::WgcLoop() {
@@ -202,7 +214,13 @@ void ScreenCapture::WgcLoop() {
             currentFrame_.copyTo(frame);
         }
         if (!frame.empty()) {
-            callback_(frame, frame.cols, frame.rows, dpi_);
+            try {
+                callback_(frame, frame.cols, frame.rows, dpi_);
+            } catch (const std::exception& e) {
+                CSN_LOG_ERROR("Frame callback exception (WGC): " + std::string(e.what()));
+            } catch (...) {
+                CSN_LOG_ERROR("Frame callback unknown exception (WGC).");
+            }
         }
     }
 }
@@ -251,7 +269,13 @@ void ScreenCapture::BitBltLoop() {
         GetDIBits(hdcMem, hbm, 0, h, mat.data, &bmi, DIB_RGB_COLORS);
         cv::Mat bgr;
         cv::cvtColor(mat, bgr, cv::COLOR_BGRA2BGR);
-        callback_(bgr, w, h, dpi_);
+        try {
+            callback_(bgr, w, h, dpi_);
+        } catch (const std::exception& e) {
+            CSN_LOG_ERROR("Frame callback exception (BitBlt): " + std::string(e.what()));
+        } catch (...) {
+            CSN_LOG_ERROR("Frame callback unknown exception (BitBlt).");
+        }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000 / std::max(fps_, 1)));
     }

@@ -18,6 +18,8 @@
 #include <fstream>
 #include <iostream>
 #include <cstdio>
+#include <cstdlib>
+#include <exception>
 
 namespace {
 
@@ -55,12 +57,31 @@ long long NowMs() {
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+void LogFatal(const std::string& msg) {
+    try {
+        std::ofstream f("codmspawn_snack.log", std::ios::app);
+        if (f) f << "[FATAL] " << msg << "\n";
+    } catch (...) {
+        // ignore secondary failures
+    }
+}
+
+void SetupTerminationHandler() {
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    std::set_terminate([] {
+        LogFatal("std::terminate called (unhandled exception in some thread); aborting.");
+        std::abort();
+    });
+}
+
 } // namespace
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
-    using namespace csn;
+    try {
+        using namespace csn;
 
-    SetConsoleCtrlHandler(ConsoleHandler, TRUE);
+        SetupTerminationHandler();
+        SetConsoleCtrlHandler(ConsoleHandler, TRUE);
 
     bool cli_diagnose = std::wstring(GetCommandLineW()).find(L"--diagnose") != std::wstring::npos;
 
@@ -110,11 +131,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     if (diagnose) {
         std::ofstream diag("csn-diagnose.log", std::ios::trunc);
-        diag << "t,hud_state,hud_conf,result_keyword,result_conf\n";
+        diag << "t,hud_state,hud_conf,result_keyword,result_conf\n" << std::flush;
 
         struct DiagState {
             bool init = false;
-            bool hud_present = true;
+            bool hud_present = false;
             bool have_result = false;
             std::string kw;
             long long last_hb = 0;
@@ -122,7 +143,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         auto emit = [&](const std::string& line) {
             CSN_LOG_INFO(line);
-            diag << line << "\n";
+            diag << line << "\n" << std::flush;
             std::cout << line << "\n";
         };
 
@@ -138,11 +159,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             ResultText result = result_detector.Detect(scaled);
             bool present = (hud.presence == HudResult::Presence::Present);
 
-            if (!st.init || present != st.hud_present) {
+            if (!st.init) {
+                emit(NowStamp() + " HUD initial state: " + (present ? "Present" : "Absent")
+                     + " conf=" + std::to_string(hud.confidence));
+                st.hud_present = present;
+                st.init = true;
+            } else if (present != st.hud_present) {
                 emit(NowStamp() + " HUD " + (st.hud_present ? "Present" : "Absent") + " -> "
                      + (present ? "Present" : "Absent") + " conf=" + std::to_string(hud.confidence));
                 st.hud_present = present;
-                st.init = true;
             }
 
             if (result.found) {
@@ -222,4 +247,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     capture.Stop();
     CSN_LOG_INFO("Exiting.");
     return 0;
+    } catch (const std::exception& e) {
+        LogFatal(std::string("Unhandled exception in main: ") + e.what());
+        return 1;
+    } catch (...) {
+        LogFatal("Unhandled unknown exception in main.");
+        return 1;
+    }
 }
