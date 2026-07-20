@@ -204,6 +204,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         HudDetector hud_detector;
         hud_detector.SetRoi(cfg.hud_roi);
         hud_detector.SetThreshold(cfg.hud_match_threshold);
+        hud_detector.SetAbsentThreshold(cfg.hud_absent_threshold);
         hud_detector.SetTemplates(cfg.hud_template_paths);
 
         ResultDetector result_detector;

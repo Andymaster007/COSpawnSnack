@@ -57,6 +57,10 @@ void HudDetector::SetThreshold(double threshold) {
     threshold_ = threshold;
 }
 
+void HudDetector::SetAbsentThreshold(double threshold) {
+    absent_threshold_ = threshold;
+}
+
 void HudDetector::SetRoi(const RationalRect& roi) {
     roi_ = roi;
     canonical_w_ = static_cast<int>(std::max(1.0, (roi.right - roi.left) * kRefWidth));
@@ -103,8 +107,23 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
             if (maxVal > best) best = maxVal;
         }
 
+        // Hysteresis: require a confident score to *enter* Present, but only
+        // drop to Absent once the score falls well below that. This stops the
+        // "damage darkening" effect (low health crushes the bar's contrast) from
+        // flickering HUD -> Absent while the player is still alive (which would
+        // falsely trigger the death/video switch). Genuine disappearance (death
+        // cam / round-end screen, score ~0.1-0.3) still crosses below
+        // absent_threshold_ and is detected.
+        bool present;
+        if (present_state_) {
+            present = (best >= absent_threshold_);
+        } else {
+            present = (best >= threshold_);
+        }
+        present_state_ = present;
+
         result.confidence = best;
-        result.presence = (best >= threshold_) ? HudResult::Presence::Present : HudResult::Presence::Absent;
+        result.presence = present ? HudResult::Presence::Present : HudResult::Presence::Absent;
         return result;
     } catch (const std::exception& e) {
         CSN_LOG_ERROR("HUD detection exception: " + std::string(e.what()));

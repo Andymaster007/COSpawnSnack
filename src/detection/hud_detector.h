@@ -25,9 +25,13 @@ public:
     void SetRoi(const RationalRect& roi);
 
     HudResult Detect(const cv::Mat& frame);
+    void SetAbsentThreshold(double threshold);
 
 private:
-    double threshold_ = 0.65;       // HUD present threshold
+    double threshold_ = 0.65;       // "become Present" gate (rising edge)
+    double absent_threshold_ = 0.35; // "stay Present" floor (falling edge)
+    bool present_state_ = true;      // hysteresis memory; start optimistic so a
+                                     // low-health first frame still reads Present
     RationalRect roi_;
     int canonical_w_ = 0;
     int canonical_h_ = 0;

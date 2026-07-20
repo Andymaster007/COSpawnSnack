@@ -44,6 +44,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.hud_roi = ParseRect(hud);
         out.hud_template_paths = hud.value("template_paths", std::vector<std::string>{});
         out.hud_match_threshold = hud.value("match_threshold", 0.65);
+        out.hud_absent_threshold = hud.value("absent_threshold", 0.35);
 
         const auto& res = j.value("result", nlohmann::json::object());
         out.result_roi = ParseRect(res);
@@ -81,6 +82,7 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         j["hud"] = RectToJson(cfg.hud_roi);
         j["hud"]["template_paths"] = cfg.hud_template_paths;
         j["hud"]["match_threshold"] = cfg.hud_match_threshold;
+        j["hud"]["absent_threshold"] = cfg.hud_absent_threshold;
 
         j["result"] = RectToJson(cfg.result_roi);
         j["result"]["keywords"] = cfg.result_keywords;
