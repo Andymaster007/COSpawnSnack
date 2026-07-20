@@ -1,5 +1,6 @@
 #pragma once
 #include "core/types.h"
+#include <opencv2/core.hpp>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -27,6 +28,13 @@ public:
     HudResult Detect(const cv::Mat& frame);
     void SetAbsentThreshold(double threshold);
 
+    // Equipment icon (e.g. "F 装备") detection. Used to distinguish "HUD bar
+    // hidden because the loadout/backpack screen is open" from actual death.
+    void SetEquipmentTemplate(const std::string& path);
+    void SetEquipmentRoi(const RationalRect& roi);
+    void SetEquipmentThreshold(double threshold);
+    EquipmentResult DetectEquipment(const cv::Mat& frame);
+
 private:
     double threshold_ = 0.65;       // "become Present" gate (rising edge)
     double absent_threshold_ = 0.35; // "stay Present" floor (falling edge)
@@ -37,6 +45,13 @@ private:
     int canonical_h_ = 0;
     std::vector<cv::Mat> templates_;  // grayscale, at canonical resolution
     std::mutex mutex_;
+
+    // Equipment icon detection state.
+    RationalRect equipment_roi_;
+    int equipment_canonical_w_ = 0;
+    int equipment_canonical_h_ = 0;
+    cv::Mat equipment_template_;      // grayscale
+    double equipment_threshold_ = 0.65;
 };
 
 } // namespace csn

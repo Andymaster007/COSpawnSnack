@@ -32,6 +32,11 @@ struct ResultText {
     std::string raw_text;  // normalized OCR text (for diagnostics / debugging)
 };
 
+struct EquipmentResult {
+    bool found = false;
+    double confidence = 0.0;
+};
+
 struct FrameInfo {
     int width = 0;
     int height = 0;

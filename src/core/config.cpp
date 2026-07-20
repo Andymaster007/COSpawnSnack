@@ -46,6 +46,11 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.hud_match_threshold = hud.value("match_threshold", 0.65);
         out.hud_absent_threshold = hud.value("absent_threshold", 0.35);
 
+        const auto& eq = j.value("equipment", nlohmann::json::object());
+        out.equipment_roi = ParseRect(eq);
+        out.equipment_template_path = eq.value("template_path", std::string{"assets/templates/equipment_f_icon.png"});
+        out.equipment_match_threshold = eq.value("match_threshold", 0.65);
+
         const auto& res = j.value("result", nlohmann::json::object());
         out.result_roi = ParseRect(res);
         out.result_keywords = res.value("keywords", std::vector<std::string>{"胜利", "战败", "失败", "VICTORY", "DEFEAT"});
@@ -53,8 +58,10 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.result_upscale_min_height = res.value("upscale_min_height", 360);
 
         const auto& sm = j.value("state_machine", nlohmann::json::object());
-        out.hud_missing_frames_to_die = sm.value("hud_missing_frames_to_die", 3);
+        out.hud_missing_frames_to_die = sm.value("hud_missing_frames_to_die", 5);
         out.result_confirm_frames = sm.value("result_confirm_frames", 2);
+        out.hud_respawn_frames = sm.value("hud_respawn_frames", 5);
+        out.death_switch_delay_ms = sm.value("death_switch_delay_ms", 3000);
 
         const auto& vid = j.value("video", nlohmann::json::object());
         out.video_target = vid.value("target", std::string{"chrome_douyin"});
@@ -84,6 +91,10 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         j["hud"]["match_threshold"] = cfg.hud_match_threshold;
         j["hud"]["absent_threshold"] = cfg.hud_absent_threshold;
 
+        j["equipment"] = RectToJson(cfg.equipment_roi);
+        j["equipment"]["template_path"] = cfg.equipment_template_path;
+        j["equipment"]["match_threshold"] = cfg.equipment_match_threshold;
+
         j["result"] = RectToJson(cfg.result_roi);
         j["result"]["keywords"] = cfg.result_keywords;
         j["result"]["confidence_threshold"] = cfg.result_confidence_threshold;
@@ -91,7 +102,9 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
 
         j["state_machine"] = {
             {"hud_missing_frames_to_die", cfg.hud_missing_frames_to_die},
-            {"result_confirm_frames", cfg.result_confirm_frames}
+            {"result_confirm_frames", cfg.result_confirm_frames},
+            {"hud_respawn_frames", cfg.hud_respawn_frames},
+            {"death_switch_delay_ms", cfg.death_switch_delay_ms}
         };
         j["video"] = {{"target", cfg.video_target}};
         j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};

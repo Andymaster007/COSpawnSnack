@@ -17,19 +17,6 @@ PixelRect ToPixelRect(const RationalRect& r, int w, int h) {
     return pr;
 }
 
-// Mild local-contrast enhancement. CODM darkens the whole screen as the
-// player takes damage; on a low-health bar (already hollow/dark) this crushes
-// its contrast against the background and makes the template match score
-// collapse. CLAHE restores local contrast so the bar stays recognisable.
-void EnhanceContrast(cv::Mat& m) {
-    try {
-        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
-        clahe->apply(m, m);
-    } catch (...) {
-        // best effort; keep the original image on failure
-    }
-}
-
 } // namespace
 
 void HudDetector::SetTemplates(const std::vector<std::string>& paths) {
@@ -46,7 +33,6 @@ void HudDetector::SetTemplates(const std::vector<std::string>& paths) {
         if (t.empty()) {
             CSN_LOG_ERROR("Failed to load HUD template: " + p);
         } else {
-            EnhanceContrast(t);  // match the live ROI preprocessing
             templates_.push_back(t);
             CSN_LOG_INFO("Loaded HUD template: " + p + " " + std::to_string(t.cols) + "x" + std::to_string(t.rows));
         }
@@ -65,6 +51,34 @@ void HudDetector::SetRoi(const RationalRect& roi) {
     roi_ = roi;
     canonical_w_ = static_cast<int>(std::max(1.0, (roi.right - roi.left) * kRefWidth));
     canonical_h_ = static_cast<int>(std::max(1.0, (roi.bottom - roi.top) * kRefHeight));
+}
+
+void HudDetector::SetEquipmentTemplate(const std::string& path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cv::Mat t = cv::imread(path, cv::IMREAD_GRAYSCALE | cv::IMREAD_UNCHANGED);
+    if (t.channels() == 4) {
+        cv::cvtColor(t, t, cv::COLOR_BGRA2GRAY);
+    } else if (t.channels() == 3) {
+        cv::cvtColor(t, t, cv::COLOR_BGR2GRAY);
+    }
+    if (t.empty()) {
+        CSN_LOG_ERROR("Failed to load equipment template: " + path);
+    } else {
+        equipment_template_ = t;
+        CSN_LOG_INFO("Loaded equipment template: " + path + " " + std::to_string(t.cols) + "x" + std::to_string(t.rows));
+    }
+}
+
+void HudDetector::SetEquipmentRoi(const RationalRect& roi) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    equipment_roi_ = roi;
+    equipment_canonical_w_ = static_cast<int>(std::max(1.0, (roi.right - roi.left) * kRefWidth));
+    equipment_canonical_h_ = static_cast<int>(std::max(1.0, (roi.bottom - roi.top) * kRefHeight));
+}
+
+void HudDetector::SetEquipmentThreshold(double threshold) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    equipment_threshold_ = threshold;
 }
 
 HudResult HudDetector::Detect(const cv::Mat& frame) {
@@ -93,8 +107,6 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
         if (canonical_w_ > 0 && canonical_h_ > 0) {
             cv::resize(gray, gray, cv::Size(canonical_w_, canonical_h_), 0, 0, cv::INTER_LINEAR);
         }
-
-        EnhanceContrast(gray);
 
         double best = 0.0;
         for (const auto& t : templates_) {
@@ -135,6 +147,50 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
         HudResult r;
         r.presence = HudResult::Presence::Unknown;
         return r;
+    }
+}
+
+EquipmentResult HudDetector::DetectEquipment(const cv::Mat& frame) {
+    try {
+        std::lock_guard<std::mutex> lock(mutex_);
+        EquipmentResult result;
+        if (equipment_template_.empty() || frame.empty()) {
+            return result;
+        }
+
+        PixelRect pr = ToPixelRect(equipment_roi_, frame.cols, frame.rows);
+        int x = std::clamp(pr.left, 0, frame.cols - 1);
+        int y = std::clamp(pr.top, 0, frame.rows - 1);
+        int rw = std::clamp(pr.right - pr.left, 1, frame.cols - x);
+        int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
+        cv::Rect roi(x, y, rw, rh);
+
+        cv::Mat gray;
+        cv::cvtColor(frame(roi), gray, cv::COLOR_BGR2GRAY);
+
+        if (equipment_canonical_w_ > 0 && equipment_canonical_h_ > 0) {
+            cv::resize(gray, gray, cv::Size(equipment_canonical_w_, equipment_canonical_h_), 0, 0, cv::INTER_LINEAR);
+        }
+
+        if (equipment_template_.cols > gray.cols || equipment_template_.rows > gray.rows) {
+            return result;
+        }
+
+        cv::Mat res;
+        cv::matchTemplate(gray, equipment_template_, res, cv::TM_CCOEFF_NORMED);
+        double minVal = 0.0, maxVal = 0.0;
+        cv::Point minLoc, maxLoc;
+        cv::minMaxLoc(res, &minVal, &maxVal, &minLoc, &maxLoc);
+
+        result.confidence = maxVal;
+        result.found = (maxVal >= equipment_threshold_);
+        return result;
+    } catch (const std::exception& e) {
+        CSN_LOG_ERROR("Equipment detection exception: " + std::string(e.what()));
+        return EquipmentResult();
+    } catch (...) {
+        CSN_LOG_ERROR("Equipment detection unknown exception.");
+        return EquipmentResult();
     }
 }
 

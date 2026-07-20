@@ -206,6 +206,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         hud_detector.SetThreshold(cfg.hud_match_threshold);
         hud_detector.SetAbsentThreshold(cfg.hud_absent_threshold);
         hud_detector.SetTemplates(cfg.hud_template_paths);
+        hud_detector.SetEquipmentTemplate(cfg.equipment_template_path);
+        hud_detector.SetEquipmentRoi(cfg.equipment_roi);
+        hud_detector.SetEquipmentThreshold(cfg.equipment_match_threshold);
 
         ResultDetector result_detector;
         result_detector.SetRoi(cfg.result_roi);
@@ -218,7 +221,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         if (diagnose) {
             std::filesystem::create_directories("diag_crops");
             std::ofstream diag("csn-diagnose.log", std::ios::trunc);
-            diag << "t,hud_state,hud_conf,result_keyword,result_conf,raw_text\n" << std::flush;
+            diag << "t,hud_state,hud_conf,result_keyword,result_conf,raw_text,absent_raw,sm_state\n" << std::flush;
+
+            auto emit = [&](const std::string& line) {
+                CSN_LOG_INFO(line);
+                diag << line << "\n" << std::flush;
+                std::cout << line << "\n";
+            };
 
             struct DiagState {
                 bool init = false;
@@ -229,14 +238,37 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 long long last_hb = 0;
                 long long last_crop = 0;
                 long long start = 0;
+                long long first_absent_ms = 0;
             } st;
             st.start = NowMs();
 
-            auto emit = [&](const std::string& line) {
-                CSN_LOG_INFO(line);
-                diag << line << "\n" << std::flush;
-                std::cout << line << "\n";
+            auto SmStateName = [](StateMachine::State s) -> std::string {
+                switch (s) {
+                    case StateMachine::State::Idle:    return "Idle";
+                    case StateMachine::State::InGame:  return "InGame";
+                    case StateMachine::State::OnVideo: return "OnVideo";
+                    default:                            return "?";
+                }
             };
+
+            // Diagnostic mode drives the REAL StateMachine with no-op switch
+            // callbacks that only log. This makes the diagnostic log a faithful
+            // "standard" mirror of live behavior: every death / result / respawn
+            // decision the live build would make is recorded here, without
+            // actually switching windows.
+            StateMachine::Dependencies diag_deps;
+            diag_deps.switch_to_video = [&]() {
+                emit(NowStamp() + " [SM] WOULD switch_to_video (death delay elapsed, no result/respawn)");
+            };
+            diag_deps.switch_back_to_game = [&]() {
+                emit(NowStamp() + " [SM] WOULD switch_back_to_game (respawn or result confirmed)");
+            };
+            diag_deps.on_result_confirmed = [&]() {
+                emit(NowStamp() + " [SM] result confirmed -> round reset, switch CANCELLED");
+            };
+            StateMachine diag_sm(diag_deps);
+            diag_sm.SetConfig(cfg.hud_missing_frames_to_die, cfg.result_confirm_frames,
+                              cfg.death_switch_delay_ms, cfg.hud_respawn_frames);
 
             capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int, int, int) {
                 cv::Mat scaled;
@@ -248,8 +280,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
                 HudResult hud = hud_detector.Detect(scaled);
                 ResultText result = result_detector.Detect(scaled);
+                EquipmentResult equipment = hud_detector.DetectEquipment(scaled);
                 bool present = (hud.presence == HudResult::Presence::Present);
+
+                // Drive the real StateMachine so the diagnostic log reflects the
+                // exact same death/result/respawn decisions the live build makes.
+                diag_sm.Update(hud, result, equipment);
                 st.raw_text = result.raw_text;
+                {
+                    long long now_d = NowMs();
+                    if (present) st.first_absent_ms = 0;
+                    else if (st.first_absent_ms == 0) st.first_absent_ms = now_d;
+                }
 
                 if (!st.init) {
                     emit(NowStamp() + " HUD initial state: " + (present ? "Present" : "Absent")
@@ -278,10 +320,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 long long now = NowMs();
                 if (now - st.last_hb > 2000) {
                     st.last_hb = now;
+                    std::string absent_raw_str = "-";
+                    if (!present && st.first_absent_ms > 0) {
+                        double sec = (now - st.first_absent_ms) / 1000.0;
+                        absent_raw_str = std::to_string(sec) + "s";
+                    }
                     std::string hb = NowStamp() + " [hb] hud=" + (present ? "Present" : "Absent")
                                   + " conf=" + std::to_string(hud.confidence)
+                                  + " absent_raw=" + absent_raw_str
+                                  + " equip=" + (equipment.found ? "YES" : "no")
+                                  + " equip_conf=" + std::to_string(equipment.confidence)
                                   + " result=" + (result.found ? result.matched_keyword : "-")
-                                  + " raw_text=[" + result.raw_text + "]";
+                                  + " raw_text=[" + result.raw_text + "]"
+                                  + " sm=" + SmStateName(diag_sm.GetState());
                     diag << hb << "\n" << std::flush;
                     std::cout << hb << "\n";
                 }
@@ -342,7 +393,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         };
 
         StateMachine sm(deps);
-        sm.SetConfig(cfg.hud_missing_frames_to_die, cfg.result_confirm_frames);
+        sm.SetConfig(cfg.hud_missing_frames_to_die, cfg.result_confirm_frames,
+                     cfg.death_switch_delay_ms, cfg.hud_respawn_frames);
 
         capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int w, int h, int dpi) {
             cv::Mat scaled;
@@ -354,13 +406,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
             HudResult hud = hud_detector.Detect(scaled);
             ResultText result = result_detector.Detect(scaled);
+            EquipmentResult equipment = hud_detector.DetectEquipment(scaled);
 
-            sm.Update(hud, result);
+            sm.Update(hud, result, equipment);
         });
 
         CSN_LOG_INFO("Capture started. Press Ctrl+C to stop.");
+        if (timeout_sec > 0) {
+            CSN_LOG_INFO("Auto-stop after " + std::to_string(timeout_sec) + " seconds.");
+        }
 
+        long long live_start = NowMs();
         while (g_running) {
+            if (timeout_sec > 0) {
+                long long elapsed = (NowMs() - live_start) / 1000;
+                if (elapsed >= timeout_sec) {
+                    CSN_LOG_INFO("Auto-stopping after " + std::to_string(timeout_sec) + " seconds.");
+                    break;
+                }
+            }
             Sleep(100);
         }
 

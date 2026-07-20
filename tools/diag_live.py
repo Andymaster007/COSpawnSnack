@@ -1,31 +1,43 @@
 #!/usr/bin/env python3
 # Live detection diagnostic for CODMSpawnSnack.
-# Mirrors the C++ pipeline: HUD (alive/dead) via OpenCV template matching with
-# resolution-independent normalization, and result text via Windows.Media.Ocr.
-# Does NOT switch focus or launch video. Logs every state change to diag_live.log
-# and prints to console.
+#
+# Mirrors the C++ pipeline so the detection + switch logic can be validated
+# without the unsigned C++ exe (blocked by Device Guard on this machine):
+#   * HUD (alive/dead) via five-segment template matching with
+#     resolution-independent normalization + hysteresis (raw-vs-raw, no CLAHE).
+#   * Equipment ("F 装备") icon via its own tight template + ROI.
+#   * Result text via Windows.Media.Ocr (throttled).
+#   * A Python port of StateMachine drives the same switch decisions, so the
+#     equipment-cancel and video-switch behaviour can be observed live.
+#
+# Does NOT switch focus or launch video. Logs every state change to
+# diag_live.log and prints to console.
 import ctypes
 import os
-import sys
 import time
 import asyncio
 import argparse
 from ctypes import wintypes
 
 import numpy as np
-from PIL import Image
 import cv2
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE_FULL = os.path.join(ROOT, "assets", "templates", "hud_bar_full.png")
-TEMPLATE_LOW = os.path.join(ROOT, "assets", "templates", "hud_bar_low.png")
+HUD_TEMPLATE_PATHS = [os.path.join(ROOT, "assets", "templates", f"hud_bar_segments_{v}.png")
+                      for v in (100, 75, 50, 25, 10)]
+EQUIP_TEMPLATE = os.path.join(ROOT, "assets", "templates", "equipment_f_icon.png")
 LOG_PATH = os.path.join(ROOT, "diag_live.log")
 
-# ROI ratios (same as config defaults)
-HUD_ROI = (0.0, 0.85, 0.25, 1.0)
-RESULT_ROI = (0.30, 0.22, 0.70, 0.52)
-CANON_W, CANON_H = 480, 162
+KREF_W, KREF_H = 1920, 1080
+HUD_ROI = (0.012, 0.954, 0.211, 0.977)
+EQUIP_ROI = (0.0063, 0.9147, 0.0766, 0.9722)
+HUD_CANON = (int((HUD_ROI[2] - HUD_ROI[0]) * KREF_W), int((HUD_ROI[3] - HUD_ROI[1]) * KREF_H))
+EQUIP_CANON = (int((EQUIP_ROI[2] - EQUIP_ROI[0]) * KREF_W), int((EQUIP_ROI[3] - EQUIP_ROI[1]) * KREF_H))
 HUD_THRESHOLD = 0.65
+HUD_ABSENT_THRESHOLD = 0.35
+EQUIP_THRESHOLD = 0.65
+
+RESULT_ROI = (0.30, 0.22, 0.70, 0.52)
 UPSCALE_MIN_H = 360
 KEYWORDS = ["胜利", "战败", "失败", "VICTORY", "DEFEAT"]
 
@@ -57,7 +69,6 @@ def find_game_window(substr="使命召唤手游"):
     if exact:
         return exact[0][0]
     if found:
-        # choose shortest title among substring matches (avoids emulator shell)
         found.sort(key=lambda x: len(x[1]))
         return found[0][0]
     return None
@@ -95,30 +106,152 @@ def capture_window(hwnd):
     return bgr
 
 
-def load_template(path):
-    im = Image.open(path).convert("L")
-    if im.size != (CANON_W, CANON_H):
-        im = im.resize((CANON_W, CANON_H), Image.LANCZOS)
-    return np.asarray(im)
+class HudDetector:
+    """Mirrors C++ HudDetector: five HUD templates (hysteresis) + equipment template."""
+    def __init__(self):
+        self.templates = []
+        for p in HUD_TEMPLATE_PATHS:
+            if os.path.exists(p):
+                self.templates.append(cv2.imread(p, cv2.IMREAD_GRAYSCALE))
+            else:
+                print(f"[warn] HUD template missing: {p}")
+        if os.path.exists(EQUIP_TEMPLATE):
+            self.etmpl = cv2.imread(EQUIP_TEMPLATE, cv2.IMREAD_GRAYSCALE)
+        else:
+            self.etmpl = None
+            print(f"[warn] equipment template missing: {EQUIP_TEMPLATE}")
+        self.present_state = True  # matches C++ default (assume alive)
 
+    def detect_hud(self, frame):
+        h, w = frame.shape[:2]
+        x1, y1 = int(HUD_ROI[0] * w), int(HUD_ROI[1] * h)
+        x2, y2 = int(HUD_ROI[2] * w), int(HUD_ROI[3] * h)
+        if x2 <= x1 or y2 <= y1:
+            return 0.0, False
+        roi = frame[y1:y2, x1:x2]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, HUD_CANON, interpolation=cv2.INTER_LINEAR)
+        best = 0.0
+        for t in self.templates:
+            if t.shape[1] > gray.shape[1] or t.shape[0] > gray.shape[0]:
+                continue
+            res = cv2.matchTemplate(gray, t, cv2.TM_CCOEFF_NORMED)
+            _, mv, _, _ = cv2.minMaxLoc(res)
+            if mv > best:
+                best = mv
+        # Hysteresis (same thresholds as C++).
+        if self.present_state:
+            present = best >= HUD_ABSENT_THRESHOLD
+        else:
+            present = best >= HUD_THRESHOLD
+        self.present_state = present
+        return best, present
 
-def hud_present(frame, templates):
-    h, w = frame.shape[:2]
-    x1, y1 = int(HUD_ROI[0] * w), int(HUD_ROI[1] * h)
-    x2, y2 = int(HUD_ROI[2] * w), int(HUD_ROI[3] * h)
-    if x2 <= x1 or y2 <= y1:
-        return 0.0, False
-    roi = frame[y1:y2, x1:x2]
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, (CANON_W, CANON_H), interpolation=cv2.INTER_LINEAR)
-    best = 0.0
-    for t in templates:
-        if t.shape[0] > gray.shape[0] or t.shape[1] > gray.shape[1]:
-            continue
-        res = cv2.matchTemplate(gray, t, cv2.TM_CCOEFF_NORMED)
+    def detect_equip(self, frame):
+        if self.etmpl is None:
+            return 0.0, False
+        h, w = frame.shape[:2]
+        x1, y1 = int(EQUIP_ROI[0] * w), int(EQUIP_ROI[1] * h)
+        x2, y2 = int(EQUIP_ROI[2] * w), int(EQUIP_ROI[3] * h)
+        if x2 <= x1 or y2 <= y1:
+            return 0.0, False
+        roi = frame[y1:y2, x1:x2]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, EQUIP_CANON, interpolation=cv2.INTER_LINEAR)
+        if self.etmpl.shape[1] > gray.shape[1] or self.etmpl.shape[0] > gray.shape[0]:
+            return 0.0, False
+        res = cv2.matchTemplate(gray, self.etmpl, cv2.TM_CCOEFF_NORMED)
         _, mv, _, _ = cv2.minMaxLoc(res)
-        best = max(best, mv)
-    return best, best >= HUD_THRESHOLD
+        return mv, mv >= EQUIP_THRESHOLD
+
+
+class StateMachine:
+    """Python port of src/state/state_machine.cpp with the same thresholds/logic."""
+    def __init__(self, logfn):
+        self.log = logfn
+        self.hud_missing_threshold = 5
+        self.result_confirm_threshold = 2
+        self.death_switch_delay_ms = 3000
+        self.hud_respawn_threshold = 5
+        self.reset()
+
+    def reset(self):
+        self.hud_seen = False
+        self.hud_missing_frames = 0
+        self.hud_present_frames = 0
+        self.pending_death_since = 0
+        self.result_active = False
+        self.result_confirm_frames = 0
+        self.result_absent_frames = 0
+        self.state = "Idle"  # Idle | InGame | OnVideo
+
+    def _now(self):
+        return int(time.time() * 1000)
+
+    def update(self, hud_present, result_found, equip_found, equip_conf):
+        # ---- result latch ----
+        if result_found:
+            self.result_confirm_frames += 1
+            self.result_absent_frames = 0
+        else:
+            self.result_confirm_frames = 0
+            self.result_absent_frames += 1
+
+        if self.result_confirm_frames >= self.result_confirm_threshold:
+            if not self.result_active:
+                self.result_active = True
+                self.log("[SM] Result text confirmed; resetting round state.")
+                self.hud_seen = False
+                self.hud_missing_frames = 0
+                self.pending_death_since = 0
+                if self.state in ("OnVideo", "InGame"):
+                    self.log("[SM] switching back to game (match/round end).")
+                self.state = "Idle"
+            return
+
+        # Re-arm only after a long sustained absence (safety net).
+        if self.result_absent_frames >= 90:
+            self.result_active = False
+
+        # ---- HUD branch ----
+        if hud_present:
+            self.hud_seen = True
+            self.hud_missing_frames = 0
+            self.pending_death_since = 0
+            self.hud_present_frames += 1
+            if not result_found:
+                self.result_active = False
+                self.result_confirm_frames = 0
+                self.result_absent_frames = 0
+            if self.state == "OnVideo":
+                if self.hud_present_frames >= self.hud_respawn_threshold:
+                    self.log("[SM] HUD stable after respawn; switching back to game.")
+                    self.state = "InGame"
+            else:
+                self.state = "InGame"
+        else:
+            self.hud_present_frames = 0  # any gap resets the respawn debounce
+            if self.hud_seen:
+                self.hud_missing_frames += 1
+                # Equipment/backpack icon while HUD bar is gone -> player is
+                # alive (changing loadout). Cancel the death countdown.
+                if self.state == "InGame" and equip_found:
+                    self.log(f"[SM] Equipment icon detected during death countdown; "
+                             f"cancelling switch (conf={equip_conf:.3f}).")
+                    self.hud_missing_frames = 0
+                    self.pending_death_since = 0
+                else:
+                    if self.hud_missing_frames >= self.hud_missing_threshold:
+                        now = self._now()
+                        if self.pending_death_since == 0:
+                            self.pending_death_since = now
+                        if self.state == "InGame" and (now - self.pending_death_since) >= self.death_switch_delay_ms:
+                            self.log("[SM] HUD absent after seen; switching to video.")
+                            self.state = "OnVideo"
+            else:
+                self.hud_missing_frames = 0
+                self.pending_death_since = 0
+                self.state = "Idle"
 
 
 # ---- optional OCR via Windows.Media.Ocr ----
@@ -130,14 +263,11 @@ async def ocr_result(frame, engine):
     if x2 <= x1 or y2 <= y1:
         return None
     roi = frame[y1:y2, x1:x2]
-    # upscale so height >= UPSCALE_MIN_H
     rh = y2 - y1
     if rh < UPSCALE_MIN_H:
         scale = UPSCALE_MIN_H / max(1, rh)
         roi = cv2.resize(roi, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-    # BGR -> BGRA
     bgra = cv2.cvtColor(roi, cv2.COLOR_BGR2BGRA)
-    # encode to PNG bytes
     ok, png = cv2.imencode(".png", bgra)
     if not ok:
         return None
@@ -175,23 +305,18 @@ def try_init_ocr():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seconds", type=int, default=600)
+    ap.add_argument("--seconds", type=int, default=30)
     ap.add_argument("--title", default="使命召唤手游")
     args = ap.parse_args()
 
-    templates = []
-    for p in (TEMPLATE_FULL, TEMPLATE_LOW):
-        if os.path.exists(p):
-            templates.append(load_template(p))
-        else:
-            print(f"[warn] template missing: {p}")
-    if not templates:
-        print("No templates loaded; exiting.")
+    det = HudDetector()
+    if not det.templates:
+        print("No HUD templates loaded; exiting.")
         return
 
     engine = try_init_ocr()
     ocr_ok = engine is not None
-    print(f"OCR: {'enabled' if ocr_ok else 'disabled (will validate HUD only)'}")
+    print(f"OCR: {'enabled' if ocr_ok else 'disabled (will validate HUD/equip only)'}")
 
     hwnd = find_game_window(args.title)
     if not hwnd:
@@ -200,22 +325,22 @@ def main():
     print(f"Found game window hwnd=0x{hwnd:X}")
 
     log = open(LOG_PATH, "w", encoding="utf-8")
-    log.write("t,hud_state,hud_conf,result_keyword\n")
-    start = time.time()
-    last_hb = 0
-    init = False
-    hud_present_state = True
-    have_result = False
-
-    def stamp():
-        return time.strftime("%H:%M:%S")
-
     def emit(line):
         print(line)
         log.write(line + "\n")
         log.flush()
 
-    emit(f"{stamp()} === diag start (window 0x{hwnd:X}, OCR={ocr_ok}) ===")
+    emit("=== diag start ===")
+    emit(f"HUD  ROI={HUD_ROI} canonical={HUD_CANON} templates={[t.shape for t in det.templates]}")
+    emit(f"EQUIP ROI={EQUIP_ROI} canonical={EQUIP_CANON} template={'loaded' if det.etmpl is not None else 'MISSING'}")
+    emit(f"thresholds: hud={HUD_THRESHOLD}/{HUD_ABSENT_THRESHOLD} equip={EQUIP_THRESHOLD}")
+
+    sm = StateMachine(emit)
+    start = time.time()
+    last_hb = 0
+    init_hud = None
+    init_equip = None
+    result_found = False
     frame_i = 0
     try:
         while time.time() - start < args.seconds:
@@ -223,34 +348,38 @@ def main():
             if frame is None:
                 time.sleep(0.2)
                 continue
-            conf, present = hud_present(frame, templates)
-            if not init or present != hud_present_state:
-                emit(f"{stamp()} HUD {'Present' if hud_present_state else 'Absent'} -> "
-                     f"{'Present' if present else 'Absent'} conf={conf:.3f}")
-                hud_present_state = present
-                init = True
+            hud_conf, hud_present = det.detect_hud(frame)
+            equip_conf, equip_found = det.detect_equip(frame)
+
             kw = None
-            if ocr_ok and (frame_i % 3 == 0):
+            if ocr_ok and (frame_i % 2 == 0):
                 try:
                     kw = asyncio.run(ocr_result(frame, engine))
-                except Exception as e:
+                    result_found = kw is not None
+                except Exception:
                     kw = None
-                if kw:
-                    if not have_result:
-                        emit(f"{stamp()} RESULT keyword='{kw}'")
-                        have_result = True
-                else:
-                    have_result = False
+
+            sm.update(hud_present, result_found, equip_found, equip_conf)
+
+            if init_hud is None or hud_present != init_hud:
+                emit(f"[HUD] {'Present' if hud_present else 'Absent'} conf={hud_conf:.3f}")
+                init_hud = hud_present
+            if init_equip is None or equip_found != init_equip:
+                emit(f"[EQUIP] {'YES' if equip_found else 'no'} conf={equip_conf:.3f}")
+                init_equip = equip_found
+
             now = time.time()
             if now - last_hb > 2:
                 last_hb = now
-                emit(f"{stamp()} [hb] hud={'Present' if present else 'Absent'} conf={conf:.3f} "
-                     f"result={kw if kw else '-'}")
+                emit(f"[hb] hud={'P' if hud_present else 'A'} conf={hud_conf:.3f} "
+                     f"equip={'YES' if equip_found else 'no'} econf={equip_conf:.3f} "
+                     f"result={kw if kw else '-'} sm={sm.state}")
+
             frame_i += 1
             time.sleep(0.3)
     except KeyboardInterrupt:
         pass
-    emit(f"{stamp()} === diag stop ===")
+    emit("=== diag stop ===")
     log.close()
 
 

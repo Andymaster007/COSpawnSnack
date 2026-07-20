@@ -5,17 +5,27 @@
     "analysis_scale": 0.5
   },
   "hud": {
-    "roi_left": 0.0,
-    "roi_top": 0.85,
-    "roi_right": 0.25,
-    "roi_bottom": 1.0,
+    "roi_left": 0.012,
+    "roi_top": 0.954,
+    "roi_right": 0.211,
+    "roi_bottom": 0.977,
     "template_paths": [
-      "assets/templates/hud_bar_segments_full.png",
-      "assets/templates/hud_bar_segments_half.png",
-      "assets/templates/hud_bar_segments_low.png"
+      "assets/templates/hud_bar_segments_100.png",
+      "assets/templates/hud_bar_segments_75.png",
+      "assets/templates/hud_bar_segments_50.png",
+      "assets/templates/hud_bar_segments_25.png",
+      "assets/templates/hud_bar_segments_10.png"
     ],
     "match_threshold": 0.65,
     "absent_threshold": 0.35
+  },
+  "equipment": {
+    "roi_left": 0.0063,
+    "roi_top": 0.9147,
+    "roi_right": 0.0766,
+    "roi_bottom": 0.9722,
+    "template_path": "assets/templates/equipment_f_icon.png",
+    "match_threshold": 0.65
   },
   "result": {
     "roi_left": 0.30,
@@ -27,8 +37,10 @@
     "upscale_min_height": 360
   },
   "state_machine": {
-    "hud_missing_frames_to_die": 3,
-    "result_confirm_frames": 2
+    "hud_missing_frames_to_die": 5,
+    "result_confirm_frames": 2,
+    "hud_respawn_frames": 5,
+    "death_switch_delay_ms": 3000
   },
   "video": {
     "target": "chrome_douyin"
