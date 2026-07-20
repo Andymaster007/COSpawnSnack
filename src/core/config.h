@@ -13,8 +13,8 @@ struct Config {
 
     RationalRect hud_roi{0.0, 0.85, 0.25, 1.0};
     std::vector<std::string> hud_template_paths = {
-        "assets/templates/hud_bar_full.png",
-        "assets/templates/hud_bar_low.png"
+        "assets/templates/hud_bar_segments_full.png",
+        "assets/templates/hud_bar_segments_low.png"
     };
     double hud_match_threshold = 0.65;
 
@@ -37,6 +37,9 @@ struct Config {
     // state change to csn-diagnose.log without switching focus or launching
     // video. Useful for verifying detection before trusting the auto-switch.
     bool diagnostic_mode = false;
+
+    // How often to save debug ROI crops in diagnostic mode (0 = disabled).
+    int diagnostic_crop_interval_seconds = 10;
 };
 
 bool LoadConfig(const std::filesystem::path& path, Config& out);

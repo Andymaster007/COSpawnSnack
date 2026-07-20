@@ -47,4 +47,5 @@ config.local.json
 # Runtime logs / diagnostic outputs
 *.log
 /outputs/
+/diag_crops/
 

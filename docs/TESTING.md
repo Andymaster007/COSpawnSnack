@@ -9,21 +9,24 @@ Build in CLion, then run the executable from the **project root** (`D:\Github\CO
 ```powershell
 cd D:\Github\CODMSpawnSnack
 .\cmake-build-debug-visual-studio\bin\CODMSpawnSnack.exe --diagnose
+# or with auto-stop after 180 seconds:
+.\cmake-build-debug-visual-studio\bin\CODMSpawnSnack.exe --diagnose --timeout 180
 ```
 
 Or set `"diagnostic_mode": true` in `config.json`.
 
 What happens:
-- A console window pops up.
+- A console window pops up (or attaches to the terminal you launched from).
 - The program finds the game window, starts WGC capture, and prints every state change:
   - `HUD Present -> Absent conf=0.27` — you died.
   - `HUD Absent -> Present conf=0.98` — you respawned.
   - `RESULT keyword='胜利' conf=1.0` — a round or match ended with a win.
   - `RESULT keyword='战败' conf=1.0` — defeat.
-- It also writes a log file `csn-diagnose.log`.
+- It also writes a log file `csn-diagnose.log` with a `raw_text` column showing the exact OCR output before keyword matching.
+- It periodically saves `diag_crops/hud_*.png` and `diag_crops/result_*.png` so you can see exactly what the detectors are looking at.
 - **No focus switching, no Chrome launch.**
 
-Stop it with `Ctrl+C` after the match, then inspect `csn-diagnose.log`.
+Stop it with `Ctrl+C` or press `q` (and `Enter` if a new console was allocated). If you pass `--timeout <sec>` it stops automatically.
 
 > **Note:** On some managed PCs, unsigned C++ executables are blocked by Windows Defender Application Control / Device Guard. If you get a "blocked by your organization" message, use Option B.
 
@@ -73,7 +76,7 @@ Example of a good test:
 19:19:10 HUD Absent -> Present conf=1.00     # next round
 ```
 
-If the log never shows `HUD Present -> Absent` when you die, the HUD template is not matching — check `assets/templates/hud_bar_full.png` and `hud_bar_low.png` or lower `hud.match_threshold`.
+If the log never shows `HUD Present -> Absent` when you die, the HUD template is not matching — check `assets/templates/hud_bar_segments_full.png` and `hud_bar_segments_low.png` or lower `hud.match_threshold`. You can also inspect `diag_crops/hud_*.png` to see what the detector sees at the moment it failed.
 
 If the log never shows `RESULT ...` when the match/round ends, the OCR is missing the text — check the `result` ROI or lower `result.confidence_threshold`.
 

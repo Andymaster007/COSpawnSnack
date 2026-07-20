@@ -29,6 +29,7 @@ struct ResultText {
     bool found = false;
     std::string matched_keyword;
     double confidence = 0.0;
+    std::string raw_text;  // normalized OCR text (for diagnostics / debugging)
 };
 
 struct FrameInfo {

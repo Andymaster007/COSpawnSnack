@@ -10,8 +10,8 @@
     "roi_right": 0.25,
     "roi_bottom": 1.0,
     "template_paths": [
-      "assets/templates/hud_bar_full.png",
-      "assets/templates/hud_bar_low.png"
+      "assets/templates/hud_bar_segments_full.png",
+      "assets/templates/hud_bar_segments_low.png"
     ],
     "match_threshold": 0.65
   },
@@ -34,5 +34,6 @@
   "focus": {
     "switch_back_delay_ms": 100
   },
-  "diagnostic_mode": false
+  "diagnostic_mode": false,
+  "diagnostic_crop_interval_seconds": 10
 }

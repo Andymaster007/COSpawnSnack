@@ -62,6 +62,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
         out.focus_switch_back_delay_ms = foc.value("switch_back_delay_ms", 100);
 
         out.diagnostic_mode = j.value("diagnostic_mode", false);
+        out.diagnostic_crop_interval_seconds = j.value("diagnostic_crop_interval_seconds", 10);
     } catch (const std::exception& e) {
         CSN_LOG_ERROR("Config parse error: " + std::string(e.what()));
         return false;
@@ -93,6 +94,7 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         j["video"] = {{"target", cfg.video_target}};
         j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};
         j["diagnostic_mode"] = cfg.diagnostic_mode;
+        j["diagnostic_crop_interval_seconds"] = cfg.diagnostic_crop_interval_seconds;
 
         std::ofstream f(path.string());
         if (!f) {

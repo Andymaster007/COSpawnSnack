@@ -150,7 +150,9 @@ ResultText ResultDetector::Detect(const cv::Mat& frame) {
             wtext += line.Text().c_str();
             wtext += L'\n';
         }
-        std::string text = RemoveWhitespace(ToLower(WStringToUtf8(wtext)));
+        std::string utf8 = WStringToUtf8(wtext);
+        result.raw_text = RemoveWhitespace(utf8);  // keep case for diagnostics
+        std::string text = ToLower(result.raw_text);
 
         for (auto const& kw : keywords_) {
             if (text.find(ToLower(kw)) != std::string::npos) {
