@@ -1,0 +1,9 @@
+{
+  "name": "codmspawn-snack",
+  "version": "0.1.0",
+  "description": "Windows utility that auto-switches to short-video apps while waiting to respawn in CODM Bomb Mode.",
+  "dependencies": [
+    "opencv4",
+    "nlohmann-json"
+  ]
+}

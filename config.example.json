@@ -1,0 +1,33 @@
+{
+  "window": {
+    "title_substring": "Call of Duty",
+    "capture_fps": 10,
+    "analysis_scale": 0.5
+  },
+  "hud": {
+    "roi_left": 0.0,
+    "roi_top": 0.72,
+    "roi_right": 0.30,
+    "roi_bottom": 1.0,
+    "template_paths": ["assets/templates/hud_bar.png"],
+    "match_threshold": 0.65
+  },
+  "result": {
+    "roi_left": 0.35,
+    "roi_top": 0.30,
+    "roi_right": 0.65,
+    "roi_bottom": 0.70,
+    "keywords": ["胜利", "失败", "VICTORY", "DEFEAT"],
+    "confidence_threshold": 0.6
+  },
+  "state_machine": {
+    "hud_missing_frames_to_die": 3,
+    "result_confirm_frames": 2
+  },
+  "video": {
+    "target": "chrome_douyin"
+  },
+  "focus": {
+    "switch_back_delay_ms": 100
+  }
+}
