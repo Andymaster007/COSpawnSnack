@@ -1,0 +1,17 @@
+# Normalize line endings to LF on commit; let Git convert on checkout if needed.
+* text=auto
+
+*.cpp text eol=lf
+*.h   text eol=lf
+*.hpp text eol=lf
+*.c   text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.cmake text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows-specific scripts can stay CRLF if ever added.
+*.bat text eol=crlf
+*.ps1 text eol=lf
