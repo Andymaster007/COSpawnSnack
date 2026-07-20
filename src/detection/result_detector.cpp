@@ -46,6 +46,13 @@ std::string ToLower(std::string s) {
     return s;
 }
 
+std::string RemoveWhitespace(std::string s) {
+    s.erase(std::remove_if(s.begin(), s.end(),
+                           [](unsigned char c) { return std::isspace(c); }),
+            s.end());
+    return s;
+}
+
 } // namespace
 
 ResultDetector::ResultDetector() = default;
@@ -59,6 +66,10 @@ void ResultDetector::SetKeywords(const std::vector<std::string>& keywords) {
 
 void ResultDetector::SetConfidenceThreshold(double threshold) {
     threshold_ = threshold;
+}
+
+void ResultDetector::SetUpscaleMinHeight(int height) {
+    upscale_min_height_ = std::max(1, height);
 }
 
 void ResultDetector::DetectImplInit() {
@@ -94,6 +105,18 @@ ResultText ResultDetector::Detect(const cv::Mat& frame) {
     int rh = std::clamp(pr.bottom - pr.top, 1, frame.rows - y);
     cv::Mat roi = frame(cv::Rect(x, y, rw, rh));
 
+    // Resolution independence: on low-res windows the result text is only a
+    // few pixels tall and OCR misses it. Upscale the ROI so its height reaches
+    // at least `upscale_min_height_` before recognition. The ROI position is
+    // already resolution-independent (screen percentages), this only fixes
+    // the text pixel size.
+    if (roi.rows < upscale_min_height_ && roi.rows > 0) {
+        const double s = static_cast<double>(upscale_min_height_) / roi.rows;
+        cv::Mat up;
+        cv::resize(roi, up, cv::Size(), s, s, cv::INTER_LINEAR);
+        roi = up;
+    }
+
     // OpenCV BGR -> BGRA8 (the format Windows.Media.Ocr expects).
     cv::Mat bgra;
     if (roi.channels() == 3) {
@@ -122,7 +145,7 @@ ResultText ResultDetector::Detect(const cv::Mat& frame) {
         wtext += line.Text().c_str();
         wtext += L'\n';
     }
-    std::string text = ToLower(WStringToUtf8(wtext));
+    std::string text = RemoveWhitespace(ToLower(WStringToUtf8(wtext)));
 
     for (auto const& kw : keywords_) {
         if (text.find(ToLower(kw)) != std::string::npos) {

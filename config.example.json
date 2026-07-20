@@ -1,24 +1,28 @@
 {
   "window": {
-    "title_substring": "Call of Duty",
+    "title_substring": "使命召唤手游",
     "capture_fps": 10,
     "analysis_scale": 0.5
   },
   "hud": {
     "roi_left": 0.0,
-    "roi_top": 0.72,
-    "roi_right": 0.30,
+    "roi_top": 0.85,
+    "roi_right": 0.25,
     "roi_bottom": 1.0,
-    "template_paths": ["assets/templates/hud_bar.png"],
+    "template_paths": [
+      "assets/templates/hud_bar_full.png",
+      "assets/templates/hud_bar_low.png"
+    ],
     "match_threshold": 0.65
   },
   "result": {
-    "roi_left": 0.35,
-    "roi_top": 0.30,
-    "roi_right": 0.65,
-    "roi_bottom": 0.70,
-    "keywords": ["胜利", "失败", "VICTORY", "DEFEAT"],
-    "confidence_threshold": 0.6
+    "roi_left": 0.30,
+    "roi_top": 0.22,
+    "roi_right": 0.70,
+    "roi_bottom": 0.52,
+    "keywords": ["胜利", "战败", "失败", "VICTORY", "DEFEAT"],
+    "confidence_threshold": 0.6,
+    "upscale_min_height": 360
   },
   "state_machine": {
     "hud_missing_frames_to_die": 3,
@@ -29,5 +33,6 @@
   },
   "focus": {
     "switch_back_delay_ms": 100
-  }
+  },
+  "diagnostic_mode": false
 }

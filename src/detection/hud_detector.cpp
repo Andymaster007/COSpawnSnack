@@ -22,13 +22,20 @@ void HudDetector::SetTemplates(const std::vector<std::string>& paths) {
     std::lock_guard<std::mutex> lock(mutex_);
     templates_.clear();
     for (const auto& p : paths) {
-        cv::Mat t = cv::imread(p, cv::IMREAD_GRAYSCALE);
+        cv::Mat t = cv::imread(p, cv::IMREAD_GRAYSCALE | cv::IMREAD_UNCHANGED);
+        if (t.channels() == 4) {
+            // Drop alpha; convert BGRA -> gray.
+            cv::cvtColor(t, t, cv::COLOR_BGRA2GRAY);
+        } else if (t.channels() == 3) {
+            cv::cvtColor(t, t, cv::COLOR_BGR2GRAY);
+        }
         if (t.empty()) {
             CSN_LOG_ERROR("Failed to load HUD template: " + p);
         } else {
             templates_.push_back(t);
         }
     }
+    RebuildScaledTemplates();
 }
 
 void HudDetector::SetThreshold(double threshold) {
@@ -37,6 +44,22 @@ void HudDetector::SetThreshold(double threshold) {
 
 void HudDetector::SetRoi(const RationalRect& roi) {
     roi_ = roi;
+    canonical_w_ = static_cast<int>(std::max(1.0, (roi.right - roi.left) * kRefWidth));
+    canonical_h_ = static_cast<int>(std::max(1.0, (roi.bottom - roi.top) * kRefHeight));
+    canonical_valid_ = true;
+    RebuildScaledTemplates();
+}
+
+void HudDetector::RebuildScaledTemplates() {
+    scaled_templates_.clear();
+    if (!canonical_valid_) return;
+    cv::Size canon(canonical_w_, canonical_h_);
+    for (const auto& t : templates_) {
+        if (t.empty()) continue;
+        cv::Mat s;
+        cv::resize(t, s, canon, 0, 0, cv::INTER_LINEAR);
+        scaled_templates_.push_back(s);
+    }
 }
 
 HudResult HudDetector::Detect(const cv::Mat& frame) {
@@ -57,8 +80,18 @@ HudResult HudDetector::Detect(const cv::Mat& frame) {
     cv::Mat gray;
     cv::cvtColor(frame(roi), gray, cv::COLOR_BGR2GRAY);
 
+    // Resolution independence: resample the live ROI crop to the canonical
+    // canvas, and compare against the templates (already resampled to the
+    // same canvas in SetRoi/SetTemplates). Because the ROI is defined in
+    // screen percentages and CODM is fixed 16:9, the bar lands at the same
+    // fractional position on every device -> the normalized images align.
+    const auto& candidates = canonical_valid_ ? scaled_templates_ : templates_;
+    if (canonical_valid_) {
+        cv::resize(gray, gray, cv::Size(canonical_w_, canonical_h_), 0, 0, cv::INTER_LINEAR);
+    }
+
     double best = 0.0;
-    for (const auto& t : templates_) {
+    for (const auto& t : candidates) {
         if (t.cols > gray.cols || t.rows > gray.rows) continue;
         cv::Mat res;
         cv::matchTemplate(gray, t, res, cv::TM_CCOEFF_NORMED);

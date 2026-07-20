@@ -43,3 +43,8 @@ config.local.json
 
 # Game dir is huge and external; never commit it
 /CODMGameApps/
+
+# Runtime logs / diagnostic outputs
+*.log
+/outputs/
+
