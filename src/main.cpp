@@ -7,25 +7,36 @@
 #include "focus/focus_controller.h"
 #include "video/ivideo_target.h"
 #include "video/browser_video_target.h"
+#include "core/engine.h"
+#include "core/app_config.h"
+#include "ui/app_window.h"
 
 #include <Windows.h>
 #include <memory>
 #include <string>
+#ifdef _DEBUG
 #include <atomic>
 #include <chrono>
 #include <ctime>
+#endif
 #include <fstream>
+#ifdef _DEBUG
 #include <iostream>
 #include <cstdio>
+#endif
 #include <cstdlib>
 #include <exception>
+#ifdef _DEBUG
 #include <conio.h>
 #include <filesystem>
 #include <algorithm>
 
 #include <opencv2/opencv.hpp>
+#endif
 
 namespace {
+
+#ifdef _DEBUG
 
 std::atomic<bool> g_running{true};
 
@@ -35,15 +46,6 @@ BOOL WINAPI ConsoleHandler(DWORD signal) {
         return TRUE;
     }
     return FALSE;
-}
-
-std::wstring Utf8ToWide(const std::string& s) {
-    if (s.empty()) return {};
-    int size = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-    if (size <= 0) return {};
-    std::wstring result(size, 0);
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), result.data(), size);
-    return result;
 }
 
 std::string NowStamp() {
@@ -61,6 +63,8 @@ long long NowMs() {
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+#endif  // _DEBUG
+
 void LogFatal(const std::string& msg) {
     try {
         std::ofstream f("codmspawn_snack.log", std::ios::app);
@@ -77,6 +81,8 @@ void SetupTerminationHandler() {
         std::abort();
     });
 }
+
+#ifdef _DEBUG
 
 bool HasCommandLineFlag(const std::wstring& flag) {
     std::wstring cmd = GetCommandLineW();
@@ -139,6 +145,8 @@ void SaveCrop(const cv::Mat& frame, const csn::RationalRect& roi,
     }
 }
 
+#endif  // _DEBUG
+
 } // namespace
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -146,15 +154,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         using namespace csn;
 
         SetupTerminationHandler();
+#ifdef _DEBUG
         SetConsoleCtrlHandler(ConsoleHandler, TRUE);
 
         bool cli_diagnose = HasCommandLineFlag(L"--diagnose");
         bool cli_help = HasCommandLineFlag(L"--help") || HasCommandLineFlag(L"-h");
         int timeout_sec = ParseTimeoutSeconds(L"--timeout");
+#endif
 
         Logger::Instance().SetFile("codmspawn_snack.log");
         CSN_LOG_INFO("CODMSpawnSnack starting.");
 
+#ifdef _DEBUG
         if (cli_help) {
             AllocConsole();
             freopen("CONOUT$", "w", stdout);
@@ -189,32 +200,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 std::cout << "Auto-stop after " << timeout_sec << " seconds.\n";
             }
             std::cout << std::endl;
-        }
 
-        FocusController focus;
-        std::wstring game_title = Utf8ToWide(cfg.window_title_substring);
-        HWND game_hwnd = focus.FindWindowByTitle(game_title);
-        if (!game_hwnd) {
-            CSN_LOG_ERROR("Game window not found. Exiting.");
-            std::cerr << "Game window not found. Exiting.\n";
-            return 1;
-        }
+            FocusController focus;
+            std::wstring game_title = Utf8ToWide(cfg.window_title_substring);
+            HWND game_hwnd = focus.FindWindowByTitle(game_title);
+            if (!game_hwnd) {
+                CSN_LOG_ERROR("Game window not found. Exiting.");
+                std::cerr << "Game window not found. Exiting.\n";
+                return 1;
+            }
 
-        ResultDetector respawn_detector;
-        respawn_detector.SetRoi(cfg.respawn_roi);
-        respawn_detector.SetKeywords(cfg.respawn_keywords);
-        respawn_detector.SetConfidenceThreshold(cfg.respawn_confidence_threshold);
-        respawn_detector.SetUpscaleMinHeight(cfg.respawn_upscale_min_height);
+            ResultDetector respawn_detector;
+            respawn_detector.SetRoi(cfg.respawn_roi);
+            respawn_detector.SetKeywords(cfg.respawn_keywords);
+            respawn_detector.SetConfidenceThreshold(cfg.respawn_confidence_threshold);
+            respawn_detector.SetUpscaleMinHeight(cfg.respawn_upscale_min_height);
 
-        ResultDetector result_detector;
-        result_detector.SetRoi(cfg.result_roi);
-        result_detector.SetKeywords(cfg.result_keywords);
-        result_detector.SetConfidenceThreshold(cfg.result_confidence_threshold);
-        result_detector.SetUpscaleMinHeight(cfg.result_upscale_min_height);
+            ResultDetector result_detector;
+            result_detector.SetRoi(cfg.result_roi);
+            result_detector.SetKeywords(cfg.result_keywords);
+            result_detector.SetConfidenceThreshold(cfg.result_confidence_threshold);
+            result_detector.SetUpscaleMinHeight(cfg.result_upscale_min_height);
 
-        ScreenCapture capture;
+            ScreenCapture capture;
 
-        if (diagnose) {
+            {
             std::filesystem::create_directories("diag_crops");
             std::ofstream diag("csn-diagnose.log", std::ios::trunc);
             diag << "t,respawn_keyword,respawn_raw,result_keyword,result_raw,sm_state\n" << std::flush;
@@ -368,87 +378,41 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             capture.Stop();
             CSN_LOG_INFO("Exiting diagnostic mode.");
             return 0;
+            }  // inner scope
+        }  // diagnose
+#endif  // _DEBUG
+
+        // ============ UI mode ============
+        // The Engine only runs while the
+        // user has monitoring enabled (Start/Stop via the UI or the F8 hotkey).
+        // Closing the window stops the engine and exits the process.
+
+        // WebView2 requires the thread that creates the environment/controller
+        // (the UI thread running the message loop) to be initialized for COM in
+        // single-threaded apartment (STA) mode. Without this,
+        // CreateCoreWebView2EnvironmentWithOptions fails with
+        // CO_E_NOTINITIALIZED (0x800401F0) even when the runtime is installed.
+        HRESULT coInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(coInit) && coInit != RPC_E_CHANGED_MODE) {
+            CSN_LOG_WARN("CoInitializeEx(STA) failed: 0x" + std::to_string(static_cast<long>(coInit)));
         }
 
-        // Companion page is enabled only when a url is configured.
-        // Empty url -> no switching at all (user drives the page manually).
-        std::unique_ptr<IVideoTarget> video_target;
-        if (!cfg.companion_url.empty()) {
-            video_target = std::make_unique<BrowserVideoTarget>(
-                Utf8ToWide(cfg.companion_url),
-                cfg.companion_app_mode,
-                cfg.companion_fullscreen,
-                Utf8ToWide(cfg.companion_browser_path));
+        auto config = LoadAppConfig();
+        auto engine = std::make_shared<Engine>(config);
+        AppWindow window(engine, config);
+        if (!window.Create()) {
+            CSN_LOG_ERROR("Failed to create main window.");
+            return 1;
         }
-
-        StateMachine::Dependencies deps;
-        deps.switch_to_video = [&]() {
-            if (!video_target) return;
-            HWND v = video_target->Show(game_hwnd);
-            if (v) focus.SwitchToWindow(v);
-        };
-        deps.switch_back_to_game = [&]() {
-            if (video_target) video_target->Hide(game_hwnd);
-            focus.SwitchToWindow(game_hwnd);
-        };
-        deps.on_result_confirmed = [&]() {
-            // Focus switch is already handled by the state machine callback.
-        };
-
-        StateMachine sm(deps);
-        sm.SetConfig(cfg.respawn_confirm_frames, cfg.result_confirm_frames,
-                     cfg.respawn_absent_frames);
-
-        capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int w, int h, int dpi) {
-            cv::Mat scaled;
-            if (cfg.analysis_scale > 0.0 && cfg.analysis_scale < 1.0) {
-                cv::resize(frame, scaled, cv::Size(), cfg.analysis_scale, cfg.analysis_scale, cv::INTER_LINEAR);
-            } else {
-                scaled = frame;
-            }
-
-            RespawnText respawn = respawn_detector.Detect(scaled);
-            // In-round banners ("炸弹已被安装" / "炸弹已被拆除" / ...) occupy the
-            // same bottom-center area as the respawn hint and replace it for a
-            // few seconds. They must NOT affect the state decision at all: if we
-            // are in-game they must not trigger the video, and if we are on the
-            // video they must not switch back (the respawn text returns later).
-            // So we mark the frame as ignored and let the state machine keep the
-            // current state unchanged.
-            {
-                const std::string& t = respawn.raw_text;
-                bool has_banner = t.find("炸弹") != std::string::npos ||
-                                  t.find("安装") != std::string::npos ||
-                                  t.find("拆除") != std::string::npos ||
-                                  t.find("排除") != std::string::npos;
-                if (has_banner && !respawn.found) {
-                    respawn.ignored = true;
-                }
-            }
-            ResultText result = result_detector.Detect(scaled);
-
-            sm.Update(respawn, result);
-        });
-
-        CSN_LOG_INFO("Capture started. Press Ctrl+C to stop.");
-        if (timeout_sec > 0) {
-            CSN_LOG_INFO("Auto-stop after " + std::to_string(timeout_sec) + " seconds.");
-        }
-
-        long long live_start = NowMs();
-        while (g_running) {
-            if (timeout_sec > 0) {
-                long long elapsed = (NowMs() - live_start) / 1000;
-                if (elapsed >= timeout_sec) {
-                    CSN_LOG_INFO("Auto-stopping after " + std::to_string(timeout_sec) + " seconds.");
-                    break;
-                }
-            }
-            Sleep(100);
-        }
-
-        capture.Stop();
+        CSN_LOG_INFO("UI started. Close the window to exit.");
+        window.RunMessageLoop();
+        engine->Stop();
         CSN_LOG_INFO("Exiting.");
+        // Balance the CoInitializeEx(STA) at the top of UI mode. RPC_E_CHANGED_MODE
+        // means COM was already initialized by someone else, so leave it alone.
+        if (coInit == S_OK || coInit == S_FALSE) {
+            CoUninitialize();
+        }
         return 0;
     } catch (const std::exception& e) {
         LogFatal(std::string("Unhandled exception in main: ") + e.what());

@@ -86,7 +86,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
 
 bool SaveConfig(const fs::path& path, const Config& cfg) {
     try {
-        nlohmann::json j;
+        nlohmann::json j = ConfigToJson(cfg);
         j["window"] = {
             {"title_substring", cfg.window_title_substring},
             {"capture_fps", cfg.capture_fps},
@@ -129,6 +129,41 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         return false;
     }
     return true;
+}
+
+nlohmann::json ConfigToJson(const Config& cfg) {
+    nlohmann::json j;
+    j["window"] = {
+        {"title_substring", cfg.window_title_substring},
+        {"capture_fps", cfg.capture_fps},
+        {"analysis_scale", cfg.analysis_scale}
+    };
+
+    j["respawn"] = RectToJson(cfg.respawn_roi);
+    j["respawn"]["keywords"] = cfg.respawn_keywords;
+    j["respawn"]["confidence_threshold"] = cfg.respawn_confidence_threshold;
+    j["respawn"]["upscale_min_height"] = cfg.respawn_upscale_min_height;
+
+    j["result"] = RectToJson(cfg.result_roi);
+    j["result"]["keywords"] = cfg.result_keywords;
+    j["result"]["confidence_threshold"] = cfg.result_confidence_threshold;
+    j["result"]["upscale_min_height"] = cfg.result_upscale_min_height;
+
+    j["state_machine"] = {
+        {"respawn_confirm_frames", cfg.respawn_confirm_frames},
+        {"result_confirm_frames", cfg.result_confirm_frames},
+        {"respawn_absent_frames", cfg.respawn_absent_frames}
+    };
+    j["companion"] = {
+        {"url", cfg.companion_url},
+        {"app_mode", cfg.companion_app_mode},
+        {"fullscreen", cfg.companion_fullscreen},
+        {"browser_path", cfg.companion_browser_path}
+    };
+    j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};
+    j["diagnostic_mode"] = cfg.diagnostic_mode;
+    j["diagnostic_crop_interval_seconds"] = cfg.diagnostic_crop_interval_seconds;
+    return j;
 }
 
 } // namespace csn

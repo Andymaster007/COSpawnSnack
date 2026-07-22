@@ -1,0 +1,14 @@
+#include "ui/resource.h"
+#include <winuser.h>
+
+// Make the embedded HTML language-neutral so FindResourceW (which matches
+// against the calling thread's UI language) can always locate it, regardless
+// of the build machine's default locale.
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+// Bare "HTML" is compiled by RC as the predefined RT_HTML resource type
+// (numeric 23), which is the conventional way to embed HTML and what
+// FindResourceW(..., MAKEINTRESOURCE(23)) expects. (Quoting it as "HTML"
+// would store the literal 6-char string including the quote marks, which
+// FindResourceW cannot match.)
+IDR_HTML_MAIN HTML "@HTML_RESOURCE_PATH@"

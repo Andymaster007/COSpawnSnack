@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 namespace csn {
 
@@ -69,5 +70,8 @@ struct Config {
 
 bool LoadConfig(const std::filesystem::path& path, Config& out);
 bool SaveConfig(const std::filesystem::path& path, const Config& cfg);
+
+// Serializes a Config to JSON. Used by SaveConfig and by the UI bridge.
+nlohmann::json ConfigToJson(const Config& cfg);
 
 } // namespace csn

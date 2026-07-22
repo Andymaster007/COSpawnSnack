@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CODM 时间管理器</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel2: #1f2630;
+    --accent: #ff5a3c;
+    --accent2: #2ea043;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  body { display: flex; flex-direction: column; padding: 22px; gap: 18px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  header .logo {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #ff9a3c);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 20px; color: #fff;
+  }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input[type="text"], select {
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel2);
+    color: var(--text); font-size: 14px; outline: none;
+  }
+  input[type="text"]:focus, select:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 14px; }
+  .row > div { flex: 1; }
+  .actions { display: flex; gap: 12px; margin-top: 4px; }
+  button {
+    flex: 1; padding: 12px 16px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;
+    transition: filter .15s ease, transform .05s ease;
+  }
+  button:active { transform: translateY(1px); }
+  button:hover { filter: brightness(1.08); }
+  #startBtn { background: var(--accent2); }
+  #stopBtn { background: #6e7681; }
+  #testBtn { background: var(--accent); }
+  .status {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; margin-top: 4px;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #6e7681; }
+  .dot.on { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+  .hint { color: var(--muted); font-size: 12px; line-height: 1.7; }
+  kbd {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 7px; font-size: 12px; color: var(--text);
+  }
+  .note {
+    font-size: 12px; color: var(--muted);
+    background: var(--panel2); border-radius: 8px; padding: 10px 12px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">CO</div>
+    <div>
+      <h1>CODM 时间管理器</h1>
+      <div class="sub">爆破模式死亡自动切视频 · 复活自动切回</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <label for="url">伴侣视频网址（死亡时打开，可为抖音 / B站 / 快手 等）</label>
+    <input id="url" type="text" placeholder="https://..." />
+  </div>
+
+  <div class="card row">
+    <div>
+      <label for="browser">浏览器</label>
+      <select id="browser">
+        <option value="chrome">Chrome</option>
+        <option value="edge">Edge</option>
+      </select>
+    </div>
+    <div>
+      <label>当前状态</label>
+      <div class="status"><span id="dot" class="dot"></span><span id="statusText">未运行</span></div>
+    </div>
+  </div>
+
+  <div class="card actions">
+    <button id="startBtn">▶ 开始监控</button>
+    <button id="stopBtn">■ 停止</button>
+    <button id="testBtn">测试切换</button>
+  </div>
+
+  <div class="note">
+    提示：伴侣视频会在你「阵亡观战」时自动打开，复活 / 回合结束自动切回游戏。<br />
+    快捷键：<kbd>F8</kbd> 可随时 开始 / 停止 监控。
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function post(msg) {
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage(JSON.stringify(msg));
+    }
+  }
+
+  // Pull current config once the page is ready.
+  window.addEventListener("DOMContentLoaded", () => {
+    post({ cmd: "getConfig" });
+  });
+
+  // C++ -> JS messages.
+  if (window.chrome && window.chrome.webview) {
+    window.chrome.webview.addEventListener("message", (e) => {
+      let data;
+      try { data = JSON.parse(e.data); } catch (_) { return; }
+      if (!data || !data.type) return;
+      if (data.type === "config") {
+        if (data.companion_url != null) $("url").value = data.companion_url;
+        if (data.browser != null) $("browser").value = data.browser;
+      } else if (data.type === "status") {
+        const on = !!data.monitoring;
+        $("dot").classList.toggle("on", on);
+        $("statusText").textContent = on ? "运行中 ▶" : "未运行";
+      }
+    });
+  }
+
+  function saveIfChanged() {
+    post({ cmd: "setConfig", companion_url: $("url").value, browser: $("browser").value });
+  }
+
+  $("url").addEventListener("change", saveIfChanged);
+  $("browser").addEventListener("change", saveIfChanged);
+  $("startBtn").addEventListener("click", () => post({ cmd: "start" }));
+  $("stopBtn").addEventListener("click", () => post({ cmd: "stop" }));
+  $("testBtn").addEventListener("click", () => post({ cmd: "testSwitch" }));
+</script>
+</body>
+</html>

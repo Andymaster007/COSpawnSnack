@@ -49,3 +49,14 @@ config.local.json
 /outputs/
 /diag_crops/
 
+# Debug / throwaway artifacts (not part of the deliverable)
+assets/templates/debug_equipment_box.png
+assets/templates/roi_comparison.png
+assets/templates/sources/
+diag_report.svg
+tools/__pycache__/
+
+# Internal blog-post meta instruction (contains 代运营/菜头 wording;
+# must not ship in the public portfolio repo)
+docs/blog_post_instruction.md
+
