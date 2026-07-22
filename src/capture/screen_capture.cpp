@@ -116,6 +116,14 @@ bool ScreenCapture::InitWgc() {
         2,
         item.Size());
     session_ = framePool_.CreateCaptureSession(item);
+    // Suppress the system-drawn yellow "this window is being captured" border
+    // that Windows 11 draws around a window captured via CreateForWindow.
+    // IsBorderRequired is part of IGraphicsCaptureSession3; on older Windows
+    // where the interface is absent, try_as returns null and we simply keep
+    // the default behavior.
+    if (auto s3 = session_.try_as<IGraphicsCaptureSession3>()) {
+        s3.IsBorderRequired(false);
+    }
     frameArrivedToken_ = framePool_.FrameArrived(
         {this, &ScreenCapture::OnFrameArrived});
     session_.StartCapture();

@@ -2,12 +2,11 @@
 #include "core/logger.h"
 #include "core/types.h"
 #include "capture/screen_capture.h"
-#include "detection/hud_detector.h"
 #include "detection/result_detector.h"
 #include "state/state_machine.h"
 #include "focus/focus_controller.h"
 #include "video/ivideo_target.h"
-#include "video/chrome_douyin_target.h"
+#include "video/browser_video_target.h"
 
 #include <Windows.h>
 #include <memory>
@@ -181,7 +180,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         if (diagnose) {
             AttachOrAllocDiagnosticConsole();
             std::cout << "=== CODMSpawnSnack DIAGNOSTIC MODE ===\n"
-                      << "Detects HUD (alive/dead) and result text (round/match win/lose).\n"
+                      << "Detects respawn text (death) and result text (round/match win/lose).\n"
                       << "No focus switching, no video launch.\n"
                       << "Log file: csn-diagnose.log\n"
                       << "Crops saved to: diag_crops/\n"
@@ -201,14 +200,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             return 1;
         }
 
-        HudDetector hud_detector;
-        hud_detector.SetRoi(cfg.hud_roi);
-        hud_detector.SetThreshold(cfg.hud_match_threshold);
-        hud_detector.SetAbsentThreshold(cfg.hud_absent_threshold);
-        hud_detector.SetTemplates(cfg.hud_template_paths);
-        hud_detector.SetEquipmentTemplate(cfg.equipment_template_path);
-        hud_detector.SetEquipmentRoi(cfg.equipment_roi);
-        hud_detector.SetEquipmentThreshold(cfg.equipment_match_threshold);
+        ResultDetector respawn_detector;
+        respawn_detector.SetRoi(cfg.respawn_roi);
+        respawn_detector.SetKeywords(cfg.respawn_keywords);
+        respawn_detector.SetConfidenceThreshold(cfg.respawn_confidence_threshold);
+        respawn_detector.SetUpscaleMinHeight(cfg.respawn_upscale_min_height);
 
         ResultDetector result_detector;
         result_detector.SetRoi(cfg.result_roi);
@@ -221,7 +217,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         if (diagnose) {
             std::filesystem::create_directories("diag_crops");
             std::ofstream diag("csn-diagnose.log", std::ios::trunc);
-            diag << "t,hud_state,hud_conf,result_keyword,result_conf,raw_text,absent_raw,sm_state\n" << std::flush;
+            diag << "t,respawn_keyword,respawn_raw,result_keyword,result_raw,sm_state\n" << std::flush;
 
             auto emit = [&](const std::string& line) {
                 CSN_LOG_INFO(line);
@@ -231,14 +227,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
             struct DiagState {
                 bool init = false;
-                bool hud_present = false;
-                bool have_result = false;
-                std::string kw;
-                std::string raw_text;
+                bool respawn_found = false;
+                bool result_found = false;
+                std::string respawn_kw;
+                std::string result_kw;
+                std::string respawn_raw;
+                std::string result_raw;
                 long long last_hb = 0;
                 long long last_crop = 0;
                 long long start = 0;
-                long long first_absent_ms = 0;
             } st;
             st.start = NowMs();
 
@@ -258,17 +255,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             // actually switching windows.
             StateMachine::Dependencies diag_deps;
             diag_deps.switch_to_video = [&]() {
-                emit(NowStamp() + " [SM] WOULD switch_to_video (death delay elapsed, no result/respawn)");
+                emit(NowStamp() + " [SM] WOULD switch_to_video (respawn text confirmed)");
             };
             diag_deps.switch_back_to_game = [&]() {
-                emit(NowStamp() + " [SM] WOULD switch_back_to_game (respawn or result confirmed)");
+                emit(NowStamp() + " [SM] WOULD switch_back_to_game (result confirmed)");
             };
             diag_deps.on_result_confirmed = [&]() {
-                emit(NowStamp() + " [SM] result confirmed -> round reset, switch CANCELLED");
+                emit(NowStamp() + " [SM] result confirmed -> round reset");
             };
             StateMachine diag_sm(diag_deps);
-            diag_sm.SetConfig(cfg.hud_missing_frames_to_die, cfg.result_confirm_frames,
-                              cfg.death_switch_delay_ms, cfg.hud_respawn_frames);
+            diag_sm.SetConfig(cfg.respawn_confirm_frames, cfg.result_confirm_frames,
+                              cfg.respawn_absent_frames);
 
             capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int, int, int) {
                 cv::Mat scaled;
@@ -278,60 +275,61 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                     scaled = frame;
                 }
 
-                HudResult hud = hud_detector.Detect(scaled);
+                RespawnText respawn = respawn_detector.Detect(scaled);
+                // Same banner handling as the live path: "炸弹已被安装" etc. are
+                // noise and must not change the state. Mark the frame ignored so
+                // the diagnostic reflects the real decision (state preserved).
+                {
+                    const std::string& t = respawn.raw_text;
+                    bool has_banner = t.find("炸弹") != std::string::npos ||
+                                      t.find("安装") != std::string::npos ||
+                                      t.find("拆除") != std::string::npos ||
+                                      t.find("排除") != std::string::npos;
+                    if (has_banner && !respawn.found) {
+                        respawn.ignored = true;
+                    }
+                }
                 ResultText result = result_detector.Detect(scaled);
-                EquipmentResult equipment = hud_detector.DetectEquipment(scaled);
-                bool present = (hud.presence == HudResult::Presence::Present);
 
                 // Drive the real StateMachine so the diagnostic log reflects the
-                // exact same death/result/respawn decisions the live build makes.
-                diag_sm.Update(hud, result, equipment);
-                st.raw_text = result.raw_text;
-                {
-                    long long now_d = NowMs();
-                    if (present) st.first_absent_ms = 0;
-                    else if (st.first_absent_ms == 0) st.first_absent_ms = now_d;
-                }
+                // exact same death/result decisions the live build makes.
+                diag_sm.Update(respawn, result);
+                st.respawn_raw = respawn.raw_text;
+                st.result_raw = result.raw_text;
 
                 if (!st.init) {
-                    emit(NowStamp() + " HUD initial state: " + (present ? "Present" : "Absent")
-                         + " conf=" + std::to_string(hud.confidence));
-                    st.hud_present = present;
+                    emit(NowStamp() + " Initial respawn=" + (respawn.found ? respawn.matched_keyword : "-")
+                         + " result=" + (result.found ? result.matched_keyword : "-"));
+                    st.respawn_found = respawn.found;
+                    st.result_found = result.found;
+                    st.respawn_kw = respawn.matched_keyword;
+                    st.result_kw = result.matched_keyword;
                     st.init = true;
-                } else if (present != st.hud_present) {
-                    emit(NowStamp() + " HUD " + (st.hud_present ? "Present" : "Absent") + " -> "
-                         + (present ? "Present" : "Absent") + " conf=" + std::to_string(hud.confidence));
-                    st.hud_present = present;
-                }
-
-                if (result.found) {
-                    if (!st.have_result || result.matched_keyword != st.kw) {
-                        emit(NowStamp() + " RESULT keyword='" + result.matched_keyword
-                             + "' conf=" + std::to_string(result.confidence)
-                             + " raw_text=[" + result.raw_text + "]");
-                        st.have_result = true;
-                        st.kw = result.matched_keyword;
+                } else {
+                    if (respawn.found != st.respawn_found) {
+                        emit(NowStamp() + " RESPAWN " + (st.respawn_found ? "FOUND" : "-")
+                             + " -> " + (respawn.found ? respawn.matched_keyword : "-")
+                             + " raw=[" + respawn.raw_text + "]");
+                        st.respawn_found = respawn.found;
+                        st.respawn_kw = respawn.matched_keyword;
                     }
-                } else if (st.have_result) {
-                    st.have_result = false;
-                    st.kw.clear();
+                    if (result.found != st.result_found) {
+                        emit(NowStamp() + " RESULT " + (st.result_found ? st.result_kw : "-")
+                             + " -> " + (result.found ? result.matched_keyword : "-")
+                             + " raw=[" + result.raw_text + "]");
+                        st.result_found = result.found;
+                        st.result_kw = result.matched_keyword;
+                    }
                 }
 
                 long long now = NowMs();
                 if (now - st.last_hb > 2000) {
                     st.last_hb = now;
-                    std::string absent_raw_str = "-";
-                    if (!present && st.first_absent_ms > 0) {
-                        double sec = (now - st.first_absent_ms) / 1000.0;
-                        absent_raw_str = std::to_string(sec) + "s";
-                    }
-                    std::string hb = NowStamp() + " [hb] hud=" + (present ? "Present" : "Absent")
-                                  + " conf=" + std::to_string(hud.confidence)
-                                  + " absent_raw=" + absent_raw_str
-                                  + " equip=" + (equipment.found ? "YES" : "no")
-                                  + " equip_conf=" + std::to_string(equipment.confidence)
+                    std::string hb = NowStamp() + " [hb] respawn="
+                                  + (respawn.found ? respawn.matched_keyword : "-")
+                                  + " rraw=[" + respawn.raw_text + "]"
                                   + " result=" + (result.found ? result.matched_keyword : "-")
-                                  + " raw_text=[" + result.raw_text + "]"
+                                  + " sraw=[" + result.raw_text + "]"
                                   + " sm=" + SmStateName(diag_sm.GetState());
                     diag << hb << "\n" << std::flush;
                     std::cout << hb << "\n";
@@ -341,7 +339,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                     now - st.last_crop > cfg.diagnostic_crop_interval_seconds * 1000) {
                     st.last_crop = now;
                     std::string ts = std::to_string(now / 1000);
-                    SaveCrop(frame, cfg.hud_roi, "diag_crops/hud_" + ts + ".png");
+                    SaveCrop(frame, cfg.respawn_roi, "diag_crops/respawn_" + ts + ".png");
                     SaveCrop(frame, cfg.result_roi, "diag_crops/result_" + ts + ".png");
                 }
             });
@@ -372,20 +370,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             return 0;
         }
 
-        auto video_target = std::make_unique<ChromeDouyinTarget>();
-        bool video_was_paused = false;
+        // Companion page is enabled only when a url is configured.
+        // Empty url -> no switching at all (user drives the page manually).
+        std::unique_ptr<IVideoTarget> video_target;
+        if (!cfg.companion_url.empty()) {
+            video_target = std::make_unique<BrowserVideoTarget>(
+                Utf8ToWide(cfg.companion_url),
+                cfg.companion_app_mode,
+                cfg.companion_fullscreen,
+                Utf8ToWide(cfg.companion_browser_path));
+        }
 
         StateMachine::Dependencies deps;
         deps.switch_to_video = [&]() {
-            video_target->Launch();
-            if (video_was_paused) {
-                video_target->Resume();
-                video_was_paused = false;
-            }
+            if (!video_target) return;
+            HWND v = video_target->Show(game_hwnd);
+            if (v) focus.SwitchToWindow(v);
         };
         deps.switch_back_to_game = [&]() {
-            video_target->Pause();
-            video_was_paused = true;
+            if (video_target) video_target->Hide(game_hwnd);
             focus.SwitchToWindow(game_hwnd);
         };
         deps.on_result_confirmed = [&]() {
@@ -393,8 +396,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         };
 
         StateMachine sm(deps);
-        sm.SetConfig(cfg.hud_missing_frames_to_die, cfg.result_confirm_frames,
-                     cfg.death_switch_delay_ms, cfg.hud_respawn_frames);
+        sm.SetConfig(cfg.respawn_confirm_frames, cfg.result_confirm_frames,
+                     cfg.respawn_absent_frames);
 
         capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int w, int h, int dpi) {
             cv::Mat scaled;
@@ -404,11 +407,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 scaled = frame;
             }
 
-            HudResult hud = hud_detector.Detect(scaled);
+            RespawnText respawn = respawn_detector.Detect(scaled);
+            // In-round banners ("炸弹已被安装" / "炸弹已被拆除" / ...) occupy the
+            // same bottom-center area as the respawn hint and replace it for a
+            // few seconds. They must NOT affect the state decision at all: if we
+            // are in-game they must not trigger the video, and if we are on the
+            // video they must not switch back (the respawn text returns later).
+            // So we mark the frame as ignored and let the state machine keep the
+            // current state unchanged.
+            {
+                const std::string& t = respawn.raw_text;
+                bool has_banner = t.find("炸弹") != std::string::npos ||
+                                  t.find("安装") != std::string::npos ||
+                                  t.find("拆除") != std::string::npos ||
+                                  t.find("排除") != std::string::npos;
+                if (has_banner && !respawn.found) {
+                    respawn.ignored = true;
+                }
+            }
             ResultText result = result_detector.Detect(scaled);
-            EquipmentResult equipment = hud_detector.DetectEquipment(scaled);
 
-            sm.Update(hud, result, equipment);
+            sm.Update(respawn, result);
         });
 
         CSN_LOG_INFO("Capture started. Press Ctrl+C to stop.");

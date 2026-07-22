@@ -1,53 +1,58 @@
 {
-  "window": {
-    "title_substring": "使命召唤手游",
-    "capture_fps": 10,
-    "analysis_scale": 0.5
+  "diagnostic_mode": false,
+  "diagnostic_crop_interval_seconds": 10,
+  "focus": {
+    "switch_back_delay_ms": 100
   },
-  "hud": {
-    "roi_left": 0.012,
-    "roi_top": 0.954,
-    "roi_right": 0.211,
-    "roi_bottom": 0.977,
-    "template_paths": [
-      "assets/templates/hud_bar_segments_100.png",
-      "assets/templates/hud_bar_segments_75.png",
-      "assets/templates/hud_bar_segments_50.png",
-      "assets/templates/hud_bar_segments_25.png",
-      "assets/templates/hud_bar_segments_10.png"
+  "respawn": {
+    "roi_left": 0.30,
+    "roi_top": 0.79,
+    "roi_right": 0.61,
+    "roi_bottom": 0.89,
+    "keywords": [
+      "你将在下一回合重生",
+      "下一回合重生",
+      "重生"
     ],
-    "match_threshold": 0.65,
-    "absent_threshold": 0.35
-  },
-  "equipment": {
-    "roi_left": 0.0063,
-    "roi_top": 0.9147,
-    "roi_right": 0.0766,
-    "roi_bottom": 0.9722,
-    "template_path": "assets/templates/equipment_f_icon.png",
-    "match_threshold": 0.65
+    "confidence_threshold": 0.6,
+    "upscale_min_height": 160
   },
   "result": {
-    "roi_left": 0.30,
+    "roi_left": 0.3,
     "roi_top": 0.22,
-    "roi_right": 0.70,
+    "roi_right": 0.7,
     "roi_bottom": 0.52,
-    "keywords": ["胜利", "战败", "失败", "VICTORY", "DEFEAT"],
+    "keywords": [
+      "胜利",
+      "战败",
+      "失败",
+      "VICTORY",
+      "DEFEAT"
+    ],
     "confidence_threshold": 0.6,
     "upscale_min_height": 360
   },
   "state_machine": {
-    "hud_missing_frames_to_die": 5,
+    "respawn_confirm_frames": 5,
     "result_confirm_frames": 2,
-    "hud_respawn_frames": 5,
-    "death_switch_delay_ms": 3000
+    "respawn_absent_frames": 20,
+    "_comment_respawn_confirm_frames": "Consecutive frames the respawn hint must persist before switching TO the video.",
+    "_comment_result_confirm_frames": "Consecutive frames 胜利/战败 must persist before switching back to the game.",
+    "_comment_respawn_absent_frames": "Consecutive frames the respawn hint must be GONE before switching back. Fires when you are alive again (respawned next round, or round/match ended). Keep high enough that a momentary OCR flicker or the '炸弹已被安装' banner (treated as still-dead) cannot trigger a premature switch-back. 20 @ 10fps ~= 2s."
   },
-  "video": {
-    "target": "chrome_douyin"
+  "companion": {
+    "url": "https://www.douyin.com",
+    "app_mode": true,
+    "fullscreen": true,
+    "browser_path": "",
+    "_comment_url": "Any web page opened while you are dead (a 'companion' page for downtime). Video sites (Douyin/Bilibili/Kuaishou) get play/pause control; ANY other site (Xiaohongshu, a blog, an academic page) just opens and is shown/hidden with no side effects. Presets: Douyin https://www.douyin.com | Bilibili https://www.bilibili.com | Kuaishou https://www.kuaishou.com. Empty string disables companion switching entirely (you drive the page yourself).",
+    "_comment_app_mode": "true = open in Chrome app mode (borderless dedicated window, no address bar/tabs). false = normal browser window (--new-window).",
+    "_comment_fullscreen": "true = maximize the companion window on show (fullscreen-window mode).",
+    "_comment_browser_path": "Optional explicit chrome.exe / msedge.exe path. Empty = 'chrome.exe' on PATH with common install-location fallbacks."
   },
-  "focus": {
-    "switch_back_delay_ms": 100
-  },
-  "diagnostic_mode": false,
-  "diagnostic_crop_interval_seconds": 10
+  "window": {
+    "analysis_scale": 0.5,
+    "capture_fps": 10,
+    "title_substring": "使命召唤手游"
+  }
 }

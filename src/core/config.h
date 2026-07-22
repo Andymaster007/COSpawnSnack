@@ -11,29 +11,14 @@ struct Config {
     int capture_fps = 10;
     double analysis_scale = 0.5;
 
-    RationalRect hud_roi{0.012, 0.954, 0.211, 0.977};
-    std::vector<std::string> hud_template_paths = {
-        "assets/templates/hud_bar_segments_100.png",
-        "assets/templates/hud_bar_segments_75.png",
-        "assets/templates/hud_bar_segments_50.png",
-        "assets/templates/hud_bar_segments_25.png",
-        "assets/templates/hud_bar_segments_10.png"
-    };
-    double hud_match_threshold = 0.65;
-    // Hysteresis lower bound for the HUD-present decision. Once the HUD is
-    // judged Present it stays Present until the match score drops below this
-    // value. This prevents the "damage darkening" effect (low health crushes
-    // the bar's contrast) from flickering the HUD to Absent while the player
-    // is still alive. Set well below hud_match_threshold.
-    double hud_absent_threshold = 0.35;
+    // Respawn hint shown while spectating teammates after death in round-based
+    // modes (e.g. "你将在下一回合重生"). Detected via OCR.
+    RationalRect respawn_roi{0.30, 0.79, 0.61, 0.89};
+    std::vector<std::string> respawn_keywords = {"你将在下一回合重生", "下一回合重生", "重生"};
+    double respawn_confidence_threshold = 0.6;
+    int respawn_upscale_min_height = 160;
 
-    // Equipment icon (e.g. "F 装备") shown when the loadout/backpack screen
-    // replaces the HUD bar. Detecting it cancels the death countdown so an
-    // alive player changing loadouts is not treated as death.
-    RationalRect equipment_roi{0.0063, 0.9147, 0.0766, 0.9722};
-    std::string equipment_template_path = "assets/templates/equipment_f_icon.png";
-    double equipment_match_threshold = 0.65;
-
+    // Result text shown at round / match end (胜利/战败 etc.). Detected via OCR.
     RationalRect result_roi{0.30, 0.22, 0.70, 0.52};
     std::vector<std::string> result_keywords = {"胜利", "战败", "失败", "VICTORY", "DEFEAT"};
     double result_confidence_threshold = 0.6;
@@ -42,27 +27,38 @@ struct Config {
     // device resolutions (text is tiny on low-res windows otherwise).
     int result_upscale_min_height = 360;
 
-    int hud_missing_frames_to_die = 5;
+    int respawn_confirm_frames = 5;
     int result_confirm_frames = 2;
-    // Consecutive HUD-present frames required before switching back to the game
-    // after a death (mirrors hud_missing_frames_to_die but in the opposite
-    // direction). Prevents a single-frame HUD flicker during the death cam from
-    // bouncing focus back to the game and immediately re-triggering a video
-    // switch.
-    int hud_respawn_frames = 5;
+    // Consecutive respawn-ABSENT frames required before switching back to the
+    // game. This fires when the player is alive again (respawned next round, or
+    // the round/match ended without a readable 胜利/战败 banner). Set it high
+    // enough that a single-frame OCR flicker -- or a transient in-round banner
+    // such as "炸弹已被安装" (the respawn detector treats that banner as "still
+    // present", so it does not even accumulate absence frames) -- cannot trigger
+    // a premature switch-back. 20 frames @ 10fps ~= 2 seconds of sustained
+    // absence is a safe default.
+    int respawn_absent_frames = 20;
 
-    // After the HUD is confirmed absent (death), wait this many milliseconds
-    // before actually switching to the video. This grace window lets a
-    // round/match that ends right after death surface its result text (胜利/
-    // 战败) first, which cancels the switch via the result branch. Without it
-    // we would flip to video and then immediately back, a jarring flash.
-    int death_switch_delay_ms = 3000;
-
-    std::string video_target = "chrome_douyin";
+    // Any web page opened while the player is dead (a "companion" page shown
+    // during downtime). It can be a video site (Douyin / Bilibili / Kuaishou)
+    // OR any other site such as Xiaohongshu, a blog, or an academic page.
+    // Video play/pause controls only take effect when the page actually has
+    // media playing; on non-video sites the window is simply shown / hidden
+    // with no side effects. Empty string disables companion switching entirely
+    // (you drive the page yourself).
+    std::string companion_url = "https://www.douyin.com";
+    // true  -> open the URL in Chrome app mode (borderless dedicated window).
+    // false -> open a normal browser window (--new-window).
+    bool companion_app_mode = true;
+    // Maximize the companion window on show (fullscreen-window mode).
+    bool companion_fullscreen = true;
+    // Explicit Chrome/Edge executable path. Empty -> "chrome.exe" on PATH with
+    // common install-location fallbacks.
+    std::string companion_browser_path;
 
     int focus_switch_back_delay_ms = 100;
 
-    // When true, the program only detects (HUD + result text) and logs every
+    // When true, the program only detects (respawn + result text) and logs every
     // state change to csn-diagnose.log without switching focus or launching
     // video. Useful for verifying detection before trusting the auto-switch.
     bool diagnostic_mode = false;
