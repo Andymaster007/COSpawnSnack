@@ -1,5 +1,7 @@
 #include "ui/app_window.h"
 #include "core/logger.h"
+#include "ui/resource.h"
+#include "ui/webview2_controller.h"
 
 #include <string>
 
@@ -24,6 +26,9 @@ bool AppWindow::Create() {
     wc.lpszClassName = kClassName;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    // Load the embedded CO icon for the title bar, taskbar button and Alt+Tab.
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ICON));
+    wc.hIconSm = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ICON));
 
     if (!RegisterClassExW(&wc)) {
         CSN_LOG_ERROR("Failed to register window class.");
@@ -31,7 +36,7 @@ bool AppWindow::Create() {
     }
 
     hwnd_ = CreateWindowExW(
-        0, kClassName, L"CODM时间管理器",
+        0, kClassName, L"CO时间管理器",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 900, 580,
         nullptr, nullptr, hInstance, this);
@@ -39,6 +44,15 @@ bool AppWindow::Create() {
     if (!hwnd_) {
         CSN_LOG_ERROR("Failed to create window.");
         return false;
+    }
+
+    // Explicitly set both the big icon (taskbar / Alt+Tab) and the small icon
+    // (title bar). This covers cases where the window-class icon is ignored,
+    // e.g. by some taskbar configurations or high-DPI scaling.
+    HICON hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ICON));
+    if (hIcon) {
+        SendMessageW(hwnd_, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(hIcon));
+        SendMessageW(hwnd_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
     }
 
     ShowWindow(hwnd_, SW_SHOW);
@@ -77,11 +91,20 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             webui_ = std::make_unique<WebUI>(hwnd_, engine_.get(), config_);
             // Engine status changes are pushed to the active UI (WebView2 page,
             // or the native fallback if WebView2 is unavailable).
-            engine_->SetStatusCallback([this](bool monitoring) {
-                if (webui_) webui_->PostStatus(monitoring);
+            engine_->SetStatusCallback([this](bool monitoring, bool window_found) {
+                if (webui_) webui_->PostStatus(monitoring, window_found);
             });
             webui_->Initialize();
-            RegisterHotKey(hwnd_, kHotkeyId, 0, VK_F8);
+            // Register a global F8 hotkey. If another program already owns F8
+            // (overlays, Afterburner, Discord, etc.) this silently fails; we log
+            // it and let the UI fall back to an in-page F8 listener (only active
+            // while our window is focused). The UI button always works.
+            BOOL hotkeyOk = RegisterHotKey(hwnd_, kHotkeyId, 0, VK_F8);
+            if (!hotkeyOk) {
+                CSN_LOG_WARN("RegisterHotKey(F8) failed; global F8 hotkey unavailable. "
+                             "UI button still works; in-page F8 fallback enabled when focused.");
+            }
+            webui_->SetHotkeyAvailable(hotkeyOk != 0);
             return 0;
         }
         case WM_SIZE: {
@@ -100,6 +123,17 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             // WebView2 failed on a background thread; build the native UI here
             // on the main thread where the parent window lives.
             if (webui_) webui_->StartNativeFallback();
+            return 0;
+        }
+        case WM_APP_WEBMSG: {
+            // A C++->JS message (status/config/hotkey/test) was queued from
+            // another thread; deliver it here on the main thread so
+            // PostWebMessageAsJson runs on the WebView2 owner thread.
+            auto* pw = reinterpret_cast<std::wstring*>(lParam);
+            if (pw) {
+                if (webui_) webui_->FlushWebMessage(*pw);
+                delete pw;
+            }
             return 0;
         }
         case WM_HOTKEY: {

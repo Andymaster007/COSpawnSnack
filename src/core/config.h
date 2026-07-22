@@ -47,15 +47,15 @@ struct Config {
     // media playing; on non-video sites the window is simply shown / hidden
     // with no side effects. Empty string disables companion switching entirely
     // (you drive the page yourself).
-    std::string companion_url = "https://www.douyin.com";
+    std::string companion_url = "https://www.bilibili.com";
     // true  -> open the URL in Chrome app mode (borderless dedicated window).
     // false -> open a normal browser window (--new-window).
     bool companion_app_mode = true;
     // Maximize the companion window on show (fullscreen-window mode).
     bool companion_fullscreen = true;
     // Explicit Chrome/Edge executable path. Empty -> "chrome.exe" on PATH with
-    // common install-location fallbacks.
-    std::string companion_browser_path;
+    // common install-location fallbacks. Default is Edge (msedge.exe).
+    std::string companion_browser_path = "msedge.exe";
 
     int focus_switch_back_delay_ms = 100;
 

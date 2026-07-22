@@ -60,17 +60,16 @@ bool LoadConfig(const fs::path& path, Config& out) {
         // Read the companion section; fall back to the old "video" key for
         // backward compatibility with earlier configs.
         const auto& comp = j.value("companion", j.value("video", nlohmann::json::object()));
-        out.companion_url = comp.value("url", std::string{"https://www.douyin.com"});
+        out.companion_url = comp.value("url", std::string{"https://www.bilibili.com"});
         if (out.companion_url.empty()) {
             // Backwards-compatible mapping of the old "target" preset.
             std::string t = comp.value("target", std::string{});
-            if (t == "chrome_bilibili") out.companion_url = "https://www.bilibili.com";
-            else if (t == "chrome_kuaishou") out.companion_url = "https://www.kuaishou.com";
-            else out.companion_url = "https://www.douyin.com";
+            if (t == "chrome_kuaishou") out.companion_url = "https://www.kuaishou.com";
+            else out.companion_url = "https://www.bilibili.com";
         }
         out.companion_app_mode = comp.value("app_mode", true);
         out.companion_fullscreen = comp.value("fullscreen", true);
-        out.companion_browser_path = comp.value("browser_path", std::string{});
+        out.companion_browser_path = comp.value("browser_path", std::string{"msedge.exe"});
 
         const auto& foc = j.value("focus", nlohmann::json::object());
         out.focus_switch_back_delay_ms = foc.value("switch_back_delay_ms", 100);

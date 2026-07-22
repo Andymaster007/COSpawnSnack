@@ -3,154 +3,420 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CODM 时间管理器</title>
+<title>CO时间管理器</title>
 <style>
   :root {
-    --bg: #0e1116;
+    --bg: #0d1117;
+    --sidebar: #11161d;
     --panel: #161b22;
     --panel2: #1f2630;
     --accent: #ff5a3c;
     --accent2: #2ea043;
     --text: #e6edf3;
     --muted: #8b949e;
-    --border: #30363d;
+    --border: #2a313c;
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; height: 100%;
     background: var(--bg); color: var(--text);
     font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px;
   }
-  body { display: flex; flex-direction: column; padding: 22px; gap: 18px; }
-  header { display: flex; align-items: center; gap: 12px; }
-  header .logo {
-    width: 40px; height: 40px; border-radius: 10px;
+  .app { display: flex; height: 100%; }
+
+  /* ---------- sidebar ---------- */
+  .sidebar {
+    width: 184px; flex-shrink: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 18px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 9px;
     background: linear-gradient(135deg, var(--accent), #ff9a3c);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 20px; color: #fff;
+    font-weight: 800; font-size: 16px; color: #fff; flex-shrink: 0;
   }
-  header h1 { font-size: 20px; margin: 0; }
-  header .sub { color: var(--muted); font-size: 12px; }
+  .brand .name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .brand .credit { font-size: 12px; font-weight: 600; color: var(--muted); line-height: 1.5; }
+  .brand .credit-name { color: var(--text); font-weight: 700; }
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav button {
+    text-align: left; padding: 11px 14px; border: none; border-radius: 9px;
+    background: transparent; color: var(--muted); font-size: 14px;
+    cursor: pointer; transition: background .12s, color .12s;
+  }
+  .nav button:hover { background: var(--panel); color: var(--text); }
+  .nav button.active { background: var(--panel2); color: var(--text); font-weight: 600; }
+  .sidebar .foot { margin-top: auto; padding: 12px 8px 0; color: var(--muted); font-size: 12px; }
+
+  /* ---------- content ---------- */
+  .content { flex: 1; overflow-y: auto; padding: 26px 30px; }
+  .page { display: none; max-width: 620px; }
+  .page.active { display: block; }
+  .page h2 { margin: 0 0 18px; font-size: 20px; }
   .card {
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px;
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
   }
-  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-  input[type="text"], select {
-    width: 100%; padding: 10px 12px; border-radius: 8px;
+  .card h3 { margin: 0 0 14px; font-size: 15px; color: var(--text); }
+  .hint { color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .hint b { color: var(--text); }
+  .ocr-tip { color: var(--accent); margin-top: 10px; }
+
+  /* ---------- main page ---------- */
+  .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .status-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #6e7681; transition: background .2s, box-shadow .2s;
+  }
+  .status-dot.on { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+  .status-text { font-size: 16px; font-weight: 600; }
+  .main-btn {
+    width: 100%; padding: 16px; border: none; border-radius: 12px;
+    font-size: 17px; font-weight: 700; color: #fff; cursor: pointer;
+    background: var(--accent2); transition: filter .15s, transform .05s;
+  }
+  .main-btn.stop { background: #6e7681; }
+  .main-btn:active { transform: translateY(1px); }
+  .main-btn:hover { filter: brightness(1.07); }
+  .main-tip { margin-top: 14px; }
+
+  /* ---------- options page ---------- */
+  .opt-group { margin-bottom: 18px; }
+  .opt-group > .label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .radio { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 9px; cursor: pointer; }
+  .radio:hover { background: var(--panel2); }
+  .radio input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .radio span { font-size: 14px; }
+  input[type="text"] {
+    width: 100%; margin-top: 10px; padding: 10px 12px; border-radius: 8px;
     border: 1px solid var(--border); background: var(--panel2);
     color: var(--text); font-size: 14px; outline: none;
   }
-  input[type="text"]:focus, select:focus { border-color: var(--accent); }
-  .row { display: flex; gap: 14px; }
-  .row > div { flex: 1; }
-  .actions { display: flex; gap: 12px; margin-top: 4px; }
-  button {
-    flex: 1; padding: 12px 16px; border: none; border-radius: 10px;
-    font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;
-    transition: filter .15s ease, transform .05s ease;
+  input[type="text"]:focus { border-color: var(--accent); }
+  .hidden { display: none; }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    padding: 11px 18px; border: none; border-radius: 9px; font-size: 14px;
+    font-weight: 600; color: #fff; cursor: pointer; background: var(--accent);
+    transition: filter .15s, transform .05s;
   }
-  button:active { transform: translateY(1px); }
-  button:hover { filter: brightness(1.08); }
-  #startBtn { background: var(--accent2); }
-  #stopBtn { background: #6e7681; }
-  #testBtn { background: var(--accent); }
-  .status {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 15px; margin-top: 4px;
-  }
-  .dot { width: 12px; height: 12px; border-radius: 50%; background: #6e7681; }
-  .dot.on { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
-  .hint { color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(1px); }
+
+  /* ---------- help page ---------- */
+  .help-block { margin-bottom: 20px; }
+  .help-block h4 { margin: 0 0 6px; font-size: 14px; color: var(--text); }
+  .help-block p { margin: 0; color: var(--muted); line-height: 1.8; font-size: 13px; }
   kbd {
     background: var(--panel2); border: 1px solid var(--border);
     border-radius: 5px; padding: 1px 7px; font-size: 12px; color: var(--text);
   }
-  .note {
-    font-size: 12px; color: var(--muted);
-    background: var(--panel2); border-radius: 8px; padding: 10px 12px;
+
+  /* ---------- about page ---------- */
+  .about-line { color: var(--muted); line-height: 1.9; font-size: 13px; }
+  .about-line b { color: var(--text); }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 18px; border-radius: 10px; font-size: 13px; opacity: 0;
+    pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50;
+    box-shadow: 0 6px 20px rgba(0,0,0,.4); max-width: 80%; text-align: center;
   }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
-  <header>
-    <div class="logo">CO</div>
-    <div>
-      <h1>CODM 时间管理器</h1>
-      <div class="sub">爆破模式死亡自动切视频 · 复活自动切回</div>
-    </div>
-  </header>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="credit">Directed by<br /><span class="credit-name">litmustz</span></div>
+      </div>
+      <nav class="nav">
+        <button data-page="main" class="active">控制台</button>
+        <button data-page="options">配置</button>
+        <button data-page="help">使用须知</button>
+        <button data-page="about">公告</button>
+      </nav>
+      <div class="foot">v1.0</div>
+    </aside>
 
-  <div class="card">
-    <label for="url">伴侣视频网址（死亡时打开，可为抖音 / B站 / 快手 等）</label>
-    <input id="url" type="text" placeholder="https://..." />
+    <main class="content">
+      <!-- ========== 控制台 ========== -->
+      <section id="page-main" class="page active">
+        <h2>控制台</h2>
+        <div class="card">
+          <div class="status-row">
+            <span id="statusDot" class="status-dot"></span>
+            <span id="statusText" class="status-text">待机中</span>
+          </div>
+          <button id="mainBtn" class="main-btn">开始监控 (F8)</button>
+          <div class="hint ocr-tip">注意：检测机制使用 OCR，请务必将局内按键透明度调至 100%！</div>
+        </div>
+      </section>
+
+      <!-- ========== 配置 ========== -->
+      <section id="page-options" class="page">
+        <h2>配置</h2>
+        <div class="card">
+          <h3>目标网址</h3>
+          <div class="opt-group">
+            <label class="radio"><input type="radio" name="url" value="bilibili" data-url="https://www.bilibili.com" /><span>B站</span></label>
+            <label class="radio"><input type="radio" name="url" value="douyin" data-url="https://www.douyin.com/?recommend=1" /><span>抖音</span></label>
+            <label class="radio"><input type="radio" name="url" value="kuaishou" data-url="https://www.kuaishou.com" /><span>快手</span></label>
+            <label class="radio"><input type="radio" name="url" value="custom" /><span>自定义</span></label>
+            <input id="customUrl" type="text" class="hidden" placeholder="https://..." />
+          </div>
+        </div>
+        <div class="card">
+          <h3>浏览器</h3>
+          <div class="opt-group">
+            <label class="radio"><input type="radio" name="browser" value="chrome" /><span>Chrome</span></label>
+            <label class="radio"><input type="radio" name="browser" value="edge" /><span>Edge</span></label>
+          </div>
+          <div class="hint">程序会自动在系统里找到对应浏览器的路径，你只需选名字。</div>
+        </div>
+      </section>
+
+      <!-- ========== 使用须知 ========== -->
+      <section id="page-help" class="page">
+        <h2>使用须知</h2>
+        <div class="card">
+          <div class="help-block">
+            <h4>它是干什么的</h4>
+            <p>自动打开指定的网页并在复活后切回游戏。（刷视频支持自动播放和暂停上一个在看的视频）</p>
+          </div>
+          <div class="help-block">
+            <h4>电脑需要什么</h4>
+            <p>
+              系统：Windows 10（2020 年以后的版本）或 Windows 11。更老的 Windows 用不了。<br />
+              浏览器：电脑上装了 Chrome 或 Edge 其中一个就行（在「配置」里选）。<br />
+              中文识别：如果你的电脑系统已经是简体中文，中文识别一般已经自带，不用额外装。万一出现"明明死了却没切出去"，多半是没装中文识别——去「设置 → 时间和语言 → 语言 → 中文(简体) → 选项」里看看有没有"光学字符识别"，没有就点"添加"。<br />
+              游戏里：窗口模式建议选择为全屏窗口。
+            </p>
+          </div>
+          <div class="help-block">
+            <h4>怎么用</h4>
+            <p>
+              ① 在「配置」选好浏览器和要打开的网站（也能填自己的网址）；② 回「控制台」点「开始监控」；③ 正常打游戏；④ 想停就再点一次，或直接关窗口。<br />
+              可以使用F8作为全局热键开始或停止监控。
+            </p>
+          </div>
+          <div class="help-block">
+            <h4>测试一下</h4>
+            <p>点下面的「测试切换」按钮，可手动触发一次"切出去 / 切回来"，确认浏览器和网址设置没问题。</p>
+            <button id="testBtn" class="btn" style="margin-top:10px;">测试切换</button>
+          </div>
+          <div class="help-block">
+            <h4>说明</h4>
+            <p>本工具只帮你切屏看网页，不涉及游戏数据和账号。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 公告 / 关于 ========== -->
+      <section id="page-about" class="page">
+        <h2>公告</h2>
+        <div class="card">
+          <div class="about-line">
+            <b>CO时间管理器</b><br />
+            打 CODM 爆破模式时，阵亡自动把指定网页盖到游戏上，复活或回合结束自动切回。<br /><br />
+            版本：v1.0<br />
+            作者：Andy<br /><br />
+            当前为首个可用版本，后续会根据使用反馈继续优化检测与切屏体验。
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <div class="card row">
-    <div>
-      <label for="browser">浏览器</label>
-      <select id="browser">
-        <option value="chrome">Chrome</option>
-        <option value="edge">Edge</option>
-      </select>
-    </div>
-    <div>
-      <label>当前状态</label>
-      <div class="status"><span id="dot" class="dot"></span><span id="statusText">未运行</span></div>
-    </div>
-  </div>
-
-  <div class="card actions">
-    <button id="startBtn">▶ 开始监控</button>
-    <button id="stopBtn">■ 停止</button>
-    <button id="testBtn">测试切换</button>
-  </div>
-
-  <div class="note">
-    提示：伴侣视频会在你「阵亡观战」时自动打开，复活 / 回合结束自动切回游戏。<br />
-    快捷键：<kbd>F8</kbd> 可随时 开始 / 停止 监控。
-  </div>
+  <div id="toast"></div>
 
 <script>
   const $ = (id) => document.getElementById(id);
 
-  function post(msg) {
-    if (window.chrome && window.chrome.webview) {
-      window.chrome.webview.postMessage(JSON.stringify(msg));
-    }
+  function hasBridge() {
+    return !!(window.chrome && window.chrome.webview);
   }
 
-  // Pull current config once the page is ready.
-  window.addEventListener("DOMContentLoaded", () => {
-    post({ cmd: "getConfig" });
+  // Returns true if the message was handed to the host bridge.
+  function post(msg) {
+    if (hasBridge()) {
+      window.chrome.webview.postMessage(msg);
+      return true;
+    }
+    return false;
+  }
+
+  /* ---------- 页面切换 ---------- */
+  document.querySelectorAll(".nav button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".nav button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const page = btn.dataset.page;
+      document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+      $("page-" + page).classList.add("active");
+    });
   });
 
-  // C++ -> JS messages.
-  if (window.chrome && window.chrome.webview) {
-    window.chrome.webview.addEventListener("message", (e) => {
-      let data;
-      try { data = JSON.parse(e.data); } catch (_) { return; }
-      if (!data || !data.type) return;
-      if (data.type === "config") {
-        if (data.companion_url != null) $("url").value = data.companion_url;
-        if (data.browser != null) $("browser").value = data.browser;
-      } else if (data.type === "status") {
-        const on = !!data.monitoring;
-        $("dot").classList.toggle("on", on);
-        $("statusText").textContent = on ? "运行中 ▶" : "未运行";
-      }
+  /* ---------- 配置加载 / 映射 ---------- */
+  const PRESETS = {
+    bilibili: "bilibili.com",
+    douyin: "douyin.com",
+    kuaishou: "kuaishou.com",
+  };
+
+  function applyConfig(cfg) {
+    const url = cfg.companion_url || "";
+    let matched = "custom";
+    for (const key in PRESETS) {
+      if (url.indexOf(PRESETS[key]) !== -1) { matched = key; break; }
+    }
+    document.querySelectorAll('input[name="url"]').forEach((r) => {
+      r.checked = (r.value === matched);
+    });
+    const custom = $("customUrl");
+    if (matched === "custom") {
+      custom.classList.remove("hidden");
+      custom.value = url;
+    } else {
+      custom.classList.add("hidden");
+    }
+    const browser = cfg.browser === "edge" ? "edge" : "chrome";
+    document.querySelectorAll('input[name="browser"]').forEach((r) => {
+      r.checked = (r.value === browser);
     });
   }
 
-  function saveIfChanged() {
-    post({ cmd: "setConfig", companion_url: $("url").value, browser: $("browser").value });
+  /* ---------- 配置变更 -> setConfig ---------- */
+  function currentUrl() {
+    const sel = document.querySelector('input[name="url"]:checked');
+    if (!sel) return "";
+    if (sel.value === "custom") return $("customUrl").value.trim();
+    return sel.dataset.url;
+  }
+  function currentBrowser() {
+    const sel = document.querySelector('input[name="browser"]:checked');
+    return sel ? sel.value : "chrome";
+  }
+  function pushConfig() {
+    post({ cmd: "setConfig", companion_url: currentUrl(), browser: currentBrowser() });
   }
 
-  $("url").addEventListener("change", saveIfChanged);
-  $("browser").addEventListener("change", saveIfChanged);
-  $("startBtn").addEventListener("click", () => post({ cmd: "start" }));
-  $("stopBtn").addEventListener("click", () => post({ cmd: "stop" }));
+  document.querySelectorAll('input[name="url"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      const custom = $("customUrl");
+      if (r.value === "custom") {
+        custom.classList.remove("hidden");
+        custom.focus();
+      } else {
+        custom.classList.add("hidden");
+      }
+      pushConfig();
+    });
+  });
+  $("customUrl").addEventListener("change", pushConfig);
+  $("customUrl").addEventListener("input", pushConfig);
+  document.querySelectorAll('input[name="browser"]').forEach((r) => {
+    r.addEventListener("change", pushConfig);
+  });
+
+  /* ---------- 控制台开关 ---------- */
+  let monitoring = false;
+  let windowFound = false;
+  function applyStatus(m, wf) {
+    monitoring = m;
+    windowFound = wf;
+    $("statusDot").classList.toggle("on", m);
+    let label = "待机中";
+    if (m) label = wf ? "监控中（检测到游戏窗口）" : "监控中（未检测到游戏窗口）";
+    $("statusText").textContent = label;
+    const btn = $("mainBtn");
+    btn.textContent = m ? "停止监控 (F8)" : "开始监控 (F8)";
+    btn.classList.toggle("stop", m);
+  }
+  $("mainBtn").addEventListener("click", () => {
+    const next = !monitoring;
+    if (post({ cmd: next ? "start" : "stop" })) {
+      // 乐观更新：点击立刻反馈；C++ 回推会校正 window_found 等权威状态。
+      applyStatus(next, windowFound);
+    } else {
+      toast("界面通信未就绪，请重启程序后再试。");
+    }
+  });
+
+  /* ---------- 测试切换 ---------- */
   $("testBtn").addEventListener("click", () => post({ cmd: "testSwitch" }));
+
+  /* ---------- toast 提示 ---------- */
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+  }
+
+  /* ---------- C++ -> JS 消息（ExecuteScript 直调，比 message 事件可靠） ---------- */
+  // C++ 端用 webview->ExecuteScript("if(window.__host)window.__host(JSON.parse('...'))")
+  // 直接调用本函数，不依赖页面侧 message 事件监听，时序问题一扫而空。
+  window.__host = function (msg) {
+    if (!msg || !msg.type) return;
+    if (msg.type === "config") {
+      applyConfig(msg);
+    } else if (msg.type === "status") {
+      applyStatus(!!msg.monitoring, !!msg.window_found);
+    } else if (msg.type === "hotkey") {
+      // 若全局 F8 热键注册失败（被别的程序占用），则在本窗口内监听 F8 兜底。
+      if (msg.ok === false) {
+        window.addEventListener("keydown", (ev) => {
+          if (ev.key === "F8" || ev.keyCode === 119) {
+            ev.preventDefault();
+            if (post({ cmd: "toggle" })) applyStatus(!monitoring, windowFound); // 乐观更新
+          }
+        });
+        toast("提示：F8 全局热键被占用，已改用窗口内 F8（需本程序在前台）。");
+      }
+    } else if (msg.type === "test") {
+      if (msg.phase === "start") {
+        toast("测试中：正在切出 / 切回…");
+      } else if (msg.phase === "done" || msg.ok !== undefined) {
+        toast(msg.ok ? "测试完成：已切出并切回游戏。" : "未找到游戏窗口，请先打开游戏再测试。");
+      }
+    }
+  };
+
+  // 诊断：把任何未捕获的 JS 错误弹出来，避免静默吞掉导致"按了没反应"。
+  window.addEventListener("error", (ev) => {
+    const t = $("toast");
+    if (t) {
+      t.textContent = "JS 错误：" + (ev.message || (ev.error && ev.error.message) || "未知");
+      t.classList.add("show");
+    }
+  });
+
+  // 首屏脚本执行时 window.chrome.webview 可能还没注入完成，
+  // 轮询兜底：一旦就绪就拉取一次当前配置。C++ -> JS 的推送走 ExecuteScript，
+  // 不再依赖此处的 webview 就绪时机。
+  let configRequested = false;
+  function setupBridge() {
+    if (configRequested) return;
+    if (window.chrome && window.chrome.webview) {
+      configRequested = true;
+      post({ cmd: "getConfig" });
+    } else {
+      setTimeout(setupBridge, 80);
+    }
+  }
+  setupBridge();
 </script>
 </body>
 </html>

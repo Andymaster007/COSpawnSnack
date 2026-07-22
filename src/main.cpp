@@ -26,6 +26,7 @@
 #endif
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #ifdef _DEBUG
 #include <conio.h>
 #include <filesystem>
@@ -67,7 +68,8 @@ long long NowMs() {
 
 void LogFatal(const std::string& msg) {
     try {
-        std::ofstream f("codmspawn_snack.log", std::ios::app);
+        auto p = csn::AppDataDir() / "codmspawn_snack.log";
+        std::ofstream f(p, std::ios::app);
         if (f) f << "[FATAL] " << msg << "\n";
     } catch (...) {
         // ignore secondary failures
@@ -162,7 +164,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         int timeout_sec = ParseTimeoutSeconds(L"--timeout");
 #endif
 
-        Logger::Instance().SetFile("codmspawn_snack.log");
+        // Keep the log in %APPDATA%/COSpawnSnack so it never lands next to
+        // the executable.
+        auto logPath = csn::AppDataDir();
+        logPath /= "codmspawn_snack.log";
+        Logger::Instance().SetFile(logPath.string());
         CSN_LOG_INFO("CODMSpawnSnack starting.");
 
 #ifdef _DEBUG
@@ -170,8 +176,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             AllocConsole();
             freopen("CONOUT$", "w", stdout);
             std::cout << "Usage:\n"
-                      << "  CODMSpawnSnack.exe\n"
-                      << "  CODMSpawnSnack.exe --diagnose [--timeout <sec>]\n"
+                      << "  CO时间管理器.exe\n"
+                      << "  CO时间管理器.exe --diagnose [--timeout <sec>]\n"
                       << "\n"
                       << "--diagnose   Only detect and log; no focus/video switching.\n"
                       << "--timeout    Stop automatically after N seconds.\n"

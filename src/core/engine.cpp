@@ -21,6 +21,8 @@ Engine::~Engine() {
 bool Engine::Start() {
     if (running_.load()) return false;
     running_ = true;
+    window_found_ = false;
+    NotifyStatus();  // push (monitoring=true, window_found=false) immediately
     thread_ = std::thread([this] { Worker(); });
     return true;
 }
@@ -28,31 +30,36 @@ bool Engine::Start() {
 void Engine::Stop() {
     if (!running_.load()) return;
     running_ = false;
+    NotifyStatus();  // push (monitoring=false) immediately on the caller thread
     if (thread_.joinable()) thread_.join();
-    if (status_cb_) status_cb_(false);
+}
+
+void Engine::NotifyStatus() {
+    if (status_cb_) status_cb_(running_.load(), window_found_.load());
+}
+
+// Chrome/Edge refuse bare hosts like "example.com" in --app= mode and fall
+// back to the browser home page (often baidu for zh-CN users), so always
+// prefix a missing scheme with https://. about:/file:/edge:/chrome: are left
+// untouched; an empty string stays empty (disables the companion entirely).
+static std::string NormalizeUrl(std::string url) {
+    size_t a = url.find_first_not_of(" \t\r\n");
+    size_t b = url.find_last_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    url = url.substr(a, b - a + 1);
+    if (url.empty()) return {};
+    bool hasScheme = url.rfind("http://", 0) == 0 ||
+                     url.rfind("https://", 0) == 0 ||
+                     url.rfind("about:", 0) == 0 ||
+                     url.rfind("file:", 0) == 0 ||
+                     url.rfind("edge:", 0) == 0 ||
+                     url.rfind("chrome:", 0) == 0;
+    if (!hasScheme) url = "https://" + url;
+    return url;
 }
 
 void Engine::Worker() {
-    if (status_cb_) status_cb_(true);
     CSN_LOG_INFO("Engine started.");
-
-    // Wait for the game window. Exact-title match is used so a wrapper window
-    // ("...模拟器高清版") is never picked. Poll once per second so we don't
-    // burn CPU, and bail out if Stop() is requested.
-    HWND hwnd = nullptr;
-    while (running_) {
-        hwnd = focus_.FindWindowByTitle(Utf8ToWide(config_->window_title_substring));
-        if (hwnd) break;
-        CSN_LOG_INFO("Game window not found; waiting 1s...");
-        for (int i = 0; i < 10 && running_; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!running_) {
-        CSN_LOG_INFO("Engine stopped before game window appeared.");
-        return;
-    }
-    game_hwnd_ = hwnd;
-    CSN_LOG_INFO("Game window found; starting capture.");
 
     ResultDetector respawn_detector;
     respawn_detector.SetRoi(config_->respawn_roi);
@@ -74,47 +81,79 @@ void Engine::Worker() {
     sm.SetConfig(config_->respawn_confirm_frames, config_->result_confirm_frames,
                  config_->respawn_absent_frames);
 
-    ScreenCapture capture;
-    capture.Start(game_hwnd_, config_->capture_fps,
-                  [&](const cv::Mat& frame, int, int, int) {
-                      cv::Mat scaled;
-                      if (config_->analysis_scale > 0.0 && config_->analysis_scale < 1.0) {
-                          cv::resize(frame, scaled, cv::Size(), config_->analysis_scale,
-                                     config_->analysis_scale, cv::INTER_LINEAR);
-                      } else {
-                          scaled = frame;
-                      }
+    // Polls until the game window appears (or Stop() is requested). While the
+    // window is missing it keeps window_found_ false and notifies the UI, so
+    // the status line reads "未检测到游戏窗口". This same path runs after the
+    // window is lost mid-monitoring, so closing + reopening the game updates
+    // the status WITHOUT a full Stop()/Start().
+    auto waitForWindow = [&]() -> HWND {
+        while (running_) {
+            HWND h = focus_.FindWindowByTitle(Utf8ToWide(config_->window_title_substring));
+            if (h) return h;
+            if (window_found_.exchange(false)) NotifyStatus();
+            for (int i = 0; i < 10 && running_; ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        return nullptr;
+    };
 
-                      RespawnText respawn = respawn_detector.Detect(scaled);
-                      // In-round banners ("炸弹已被安装" etc.) occupy the same
-                      // area as the respawn hint and must not change state.
-                      {
-                          const std::string& t = respawn.raw_text;
-                          bool has_banner = t.find("炸弹") != std::string::npos ||
-                                            t.find("安装") != std::string::npos ||
-                                            t.find("拆除") != std::string::npos ||
-                                            t.find("排除") != std::string::npos;
-                          if (has_banner && !respawn.found) {
-                              respawn.ignored = true;
-                          }
-                      }
-                      ResultText result = result_detector.Detect(scaled);
-                      sm.Update(respawn, result);
-                  });
-
-    CSN_LOG_INFO("Capture started. Monitoring...");
     while (running_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+        HWND hwnd = waitForWindow();
+        if (!hwnd) break;  // Stop() requested
 
-    capture.Stop();
+        game_hwnd_ = hwnd;
+        bool was_found = window_found_.load();
+        window_found_ = true;
+        if (!was_found) NotifyStatus();  // push (monitoring=true, window_found=true)
+        CSN_LOG_INFO("Game window found; starting capture.");
+
+        ScreenCapture capture;
+        capture.Start(game_hwnd_, config_->capture_fps,
+                      [&](const cv::Mat& frame, int, int, int) {
+                          cv::Mat scaled;
+                          if (config_->analysis_scale > 0.0 && config_->analysis_scale < 1.0) {
+                              cv::resize(frame, scaled, cv::Size(), config_->analysis_scale,
+                                         config_->analysis_scale, cv::INTER_LINEAR);
+                          } else {
+                              scaled = frame;
+                          }
+
+                          RespawnText respawn = respawn_detector.Detect(scaled);
+                          // In-round banners ("炸弹已被安装" etc.) occupy the same
+                          // area as the respawn hint and must not change state.
+                          {
+                              const std::string& t = respawn.raw_text;
+                              bool has_banner = t.find("炸弹") != std::string::npos ||
+                                                t.find("安装") != std::string::npos ||
+                                                t.find("拆除") != std::string::npos ||
+                                                t.find("排除") != std::string::npos;
+                              if (has_banner && !respawn.found) {
+                                  respawn.ignored = true;
+                              }
+                          }
+                          ResultText result = result_detector.Detect(scaled);
+                          sm.Update(respawn, result);
+                      });
+
+        CSN_LOG_INFO("Capture started. Monitoring...");
+        // Monitor until the game window goes away (closed / crashed) or we are
+        // asked to stop. IsWindow() is checked every ~100ms.
+        while (running_ && IsWindow(game_hwnd_)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        capture.Stop();
+        CSN_LOG_INFO("Game window lost (or engine stopped).");
+        // Loop back to waitForWindow: it will reset window_found_ to false and
+        // wait for the game to reappear, then resume monitoring.
+    }
     CSN_LOG_INFO("Engine stopped.");
-    if (status_cb_) status_cb_(false);
 }
 
 void Engine::EnsureVideoTarget() {
     std::lock_guard<std::mutex> lock(video_config_mutex_);
-    if (config_->companion_url.empty()) {
+    std::string url = NormalizeUrl(config_->companion_url);
+    config_->companion_url = url;
+    if (url.empty()) {
         video_target_.reset();
         video_url_.clear();
         video_browser_.clear();
@@ -146,7 +185,7 @@ void Engine::SwitchBackToGame() {
 
 void Engine::SetCompanion(const std::string& url, const std::string& browser_path) {
     std::lock_guard<std::mutex> lock(video_config_mutex_);
-    config_->companion_url = url;
+    config_->companion_url = NormalizeUrl(url);
     config_->companion_browser_path = browser_path;
 }
 
@@ -162,16 +201,16 @@ std::string Engine::GetBrowserChoice() const {
     return edge ? "edge" : "chrome";
 }
 
-void Engine::TestSwitch() {
+bool Engine::TestSwitch() {
     HWND hwnd = focus_.FindWindowByTitle(Utf8ToWide(config_->window_title_substring));
     if (!hwnd) {
         CSN_LOG_WARN("TestSwitch: game window not found; nothing to switch against.");
-        return;
+        return false;
     }
     EnsureVideoTarget();
     if (!video_target_) {
         CSN_LOG_WARN("TestSwitch: no companion URL configured; nothing to show.");
-        return;
+        return false;
     }
     HWND v = video_target_->Show(hwnd);
     if (v) focus_.SwitchToWindow(v);
@@ -179,6 +218,7 @@ void Engine::TestSwitch() {
     video_target_->Hide(hwnd);
     focus_.SwitchToWindow(hwnd);
     CSN_LOG_INFO("TestSwitch: one show/hide cycle completed.");
+    return true;
 }
 
 } // namespace csn

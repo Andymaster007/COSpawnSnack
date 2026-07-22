@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(CODMSpawnSnack CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -58,6 +58,7 @@ file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS "src/*.h")
 # rc.exe's working directory depends on the generator, so a relative path is
 # unreliable; using configure_file avoids the "UI resource missing" issue.
 set(HTML_RESOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/web/index.html")
+set(ICON_RESOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/resources.rc.in"
     "${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
@@ -102,4 +103,5 @@ endif()
 
 set_target_properties(CODMSpawnSnack PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    OUTPUT_NAME "CO时间管理器"
 )

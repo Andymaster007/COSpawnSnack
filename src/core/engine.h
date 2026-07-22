@@ -22,7 +22,9 @@ namespace csn {
 // effect without a full restart.
 class Engine {
 public:
-    using StatusCallback = std::function<void(bool monitoring)>;
+    // monitoring: whether the engine loop is running; window_found: whether
+    // the game window has been located yet (false while still waiting for it).
+    using StatusCallback = std::function<void(bool monitoring, bool window_found)>;
 
     explicit Engine(std::shared_ptr<Config> config);
     ~Engine();
@@ -34,12 +36,16 @@ public:
     // Stop the loop and join the worker thread. Idempotent.
     void Stop();
     bool IsRunning() const { return running_.load(); }
+    bool IsWindowFound() const { return window_found_.load(); }
 
     // Manually trigger one show/hide cycle to verify the browser + URL config.
-    // Works independently of Start()/Stop().
-    void TestSwitch();
+    // Works independently of Start()/Stop(). Returns true if a cycle actually
+    // ran (game window + companion URL present), false otherwise.
+    bool TestSwitch();
 
     void SetStatusCallback(StatusCallback cb) { status_cb_ = std::move(cb); }
+    // Pushes the current (monitoring, window_found) state to the UI callback.
+    void NotifyStatus();
 
     // UI-facing accessors for the companion (video) settings. Guarded by
     // video_config_mutex_ so concurrent worker reads stay safe.
@@ -55,6 +61,7 @@ private:
 
     std::shared_ptr<Config> config_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> window_found_{false};
     std::thread thread_;
     StatusCallback status_cb_;
 

@@ -10,6 +10,10 @@
 
 namespace csn {
 
+// Posted from any thread to ask the main window thread to deliver a C++->JS
+// message. lParam is a heap-allocated std::wstring* that the handler frees.
+static const UINT WM_APP_WEBMSG = WM_APP + 2;
+
 class Engine;
 
 // Hosts the WebView2 control inside the given parent window and bridges the
@@ -28,8 +32,19 @@ public:
     void Initialize();
     void ResizeTo(RECT rc);
     // Push current state to the page (called on init and on engine status change).
-    void PostStatus(bool monitoring);
+    void PostStatus(bool monitoring, bool window_found);
     void PostConfig();
+    // Records whether the global F8 hotkey was successfully registered. When it
+    // failed (e.g. another app already owns F8), the page falls back to an
+    // in-page F8 listener so the key still works while the window is focused.
+    void SetHotkeyAvailable(bool ok) { hotkey_ok_ = ok; }
+    void PostHotkeyState(bool ok);
+    // Actually performs PostWebMessageAsJson; runs on the main thread only
+    // (invoked from the WM_APP_WEBMSG handler in app_window.cpp).
+    // Actually performs the host->page push via ICoreWebView2::ExecuteScript
+    // (calls the page-global window.__host(JSON.parse(...))); runs on the main
+    // thread only (invoked from the WM_APP_WEBMSG handler in app_window.cpp).
+    void FlushWebMessage(const std::wstring& js);
 
     // Forwards WM_COMMAND from the host window to the native fallback (only
     // relevant when WebView2 is unavailable). Returns true if handled.
@@ -51,6 +66,12 @@ private:
                                  ICoreWebView2WebMessageReceivedEventArgs* args);
     void HandleCommand(const std::string& json);
     std::wstring LoadHtmlResourceW();
+    // Posts a JSON object to the page. ALWAYS marshals onto the main/UI thread
+    // (via a posted window message) because ICoreWebView2::PostWebMessageAsJson
+    // must run on the WebView2 owner thread and silently drops when called from
+    // a worker thread or re-entrant inside a WebView2 callback. This is what
+    // makes engine status / config / hotkey pushes reliably reach the page.
+    void PostWebMessageSafe(const nlohmann::json& j);
 
     HWND parent_ = nullptr;
     Engine* engine_ = nullptr;
@@ -68,6 +89,7 @@ private:
     EventRegistrationToken nav_token_{};
     bool initialized_ = false;
     bool native_requested_ = false;
+    bool hotkey_ok_ = false;
 };
 
 } // namespace csn

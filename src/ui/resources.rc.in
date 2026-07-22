@@ -12,3 +12,8 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 // would store the literal 6-char string including the quote marks, which
 // FindResourceW cannot match.)
 IDR_HTML_MAIN HTML "@HTML_RESOURCE_PATH@"
+
+// Application icon. The linker picks this up as the exe icon shown in
+// Explorer, the taskbar and the window caption. It is the orange "CO" brand
+// mark, rendered to a multi-resolution .ico in assets/icon.ico.
+IDI_ICON ICON "@ICON_RESOURCE_PATH@"

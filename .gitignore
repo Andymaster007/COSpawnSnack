@@ -55,6 +55,8 @@ assets/templates/roi_comparison.png
 assets/templates/sources/
 diag_report.svg
 tools/__pycache__/
+# Isolated Python deps installed locally for icon-generation script
+tools/_pylibs/
 
 # Internal blog-post meta instruction (contains 代运营/菜头 wording;
 # must not ship in the public portfolio repo)

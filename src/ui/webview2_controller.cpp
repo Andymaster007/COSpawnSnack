@@ -13,6 +13,7 @@
 #include <shellapi.h>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <filesystem>
 
 using Microsoft::WRL::ComPtr;
@@ -34,6 +35,23 @@ std::wstring ToHexWide(DWORD value) {
 
 namespace csn {
 namespace fs = std::filesystem;
+
+// Escape a UTF-8 JSON string so it can be embedded inside a JS single-quoted
+// string literal: backslash and single-quote must be escaped. (Our JSON uses
+// double quotes, which are safe inside a single-quoted JS string.)
+std::wstring JsonToJsArg(const std::string& utf8json) {
+    std::wstring w = Utf8ToWide(utf8json);
+    std::wstring out;
+    out.reserve(w.size() + 8);
+    for (wchar_t c : w) {
+        if (c == L'\\') out += L"\\\\";
+        else if (c == L'\'') out += L"\\'";
+        else if (c == L'\n') out += L"\\n";
+        else if (c == L'\r') out += L"\\r";
+        else out += c;
+    }
+    return out;
+}
 
 WebUI::WebUI(HWND parent, Engine* engine, std::shared_ptr<Config> config)
     : parent_(parent), engine_(engine), config_(std::move(config)) {}
@@ -129,7 +147,8 @@ HRESULT WebUI::OnControllerCreated(HRESULT hr, ICoreWebView2Controller* controll
         Callback<ICoreWebView2NavigationCompletedEventHandler>(
             [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
                 PostConfig();
-                PostStatus(engine_->IsRunning());
+                PostStatus(engine_->IsRunning(), engine_->IsWindowFound());
+                PostHotkeyState(hotkey_ok_);
                 return S_OK;
             }).Get(),
         &nav_token_);
@@ -212,34 +231,84 @@ void WebUI::HandleCommand(const std::string& json) {
             engine_->Start();
         } else if (cmd == "stop") {
             engine_->Stop();
+        } else if (cmd == "toggle") {
+            if (engine_->IsRunning()) engine_->Stop();
+            else engine_->Start();
         } else if (cmd == "testSwitch") {
-            engine_->TestSwitch();
+            PostWebMessageSafe({{"type", "test"}, {"phase", "start"}});
+            // Run the show/hide cycle off the UI thread so it doesn't block the
+            // message pump (which would delay the queued web messages above).
+            std::thread([this]() {
+                bool ok = engine_->TestSwitch();
+                PostWebMessageSafe({{"type", "test"}, {"ok", ok}});
+            }).detach();
         }
     } catch (const std::exception& e) {
         CSN_LOG_WARN("WebUI command parse error: " + std::string(e.what()));
     }
 }
 
+void WebUI::PostWebMessageSafe(const nlohmann::json& j) {
+    if (!webview_ || !parent_) {
+        CSN_LOG_WARN("PostWebMessageSafe skipped: webview_=" +
+                     std::to_string(!!webview_) + " parent_=" +
+                     std::to_string(!!parent_));
+        return;
+    }
+    // Host -> page delivery uses ExecuteScript (not PostWebMessageAsJson +
+    // a JS 'message' listener). ExecuteScript runs the JS directly in the
+    // page and is far more reliable: there is no dependency on the page-side
+    // event listener having been registered at the right moment. We invoke the
+    // page-global dispatcher window.__host(JSON.parse('<json>')).
+    std::wstring js = L"if(window.__host)window.__host(JSON.parse('" +
+                      JsonToJsArg(j.dump()) + L"'));";
+    std::wstring* pw = new std::wstring(std::move(js));
+    if (!PostMessageW(parent_, WM_APP_WEBMSG, 0, reinterpret_cast<LPARAM>(pw))) {
+        CSN_LOG_WARN("PostWebMessageSafe: PostMessage failed; discarding: " +
+                     WideToUtf8(*pw));
+        delete pw;
+    } else {
+        CSN_LOG_INFO("PostWebMessageSafe queued: " + WideToUtf8(*pw));
+    }
+}
+
+void WebUI::FlushWebMessage(const std::wstring& js) {
+    if (!webview_) {
+        CSN_LOG_WARN("FlushWebMessage: webview_ is null; cannot deliver: " +
+                     WideToUtf8(js));
+        return;
+    }
+    // Run the JS on the page's main world. The no-op completion handler is
+    // required; we don't care about the script's return value.
+    HRESULT hr = webview_->ExecuteScript(
+        js.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
+    CSN_LOG_INFO("FlushWebMessage ExecuteScript hr=0x" +
+                 std::to_string(static_cast<long>(hr)) + " js=" + WideToUtf8(js));
+}
+
 void WebUI::PostConfig() {
-    if (!webview_) return;
-    nlohmann::json j = {
+    if (native_ui_) return;
+    PostWebMessageSafe({
         {"type", "config"},
         {"companion_url", engine_->GetCompanionUrl()},
         {"browser", engine_->GetBrowserChoice()}
-    };
-    std::wstring w = Utf8ToWide(j.dump());
-    webview_->PostWebMessageAsJson(w.c_str());
+    });
 }
 
-void WebUI::PostStatus(bool monitoring) {
+void WebUI::PostStatus(bool monitoring, bool window_found) {
     if (native_ui_) {
         native_ui_->UpdateStatus(monitoring);
         return;
     }
-    if (!webview_) return;
-    nlohmann::json j = {{"type", "status"}, {"monitoring", monitoring}};
-    std::wstring w = Utf8ToWide(j.dump());
-    webview_->PostWebMessageAsJson(w.c_str());
+    PostWebMessageSafe({{"type", "status"},
+                        {"monitoring", monitoring},
+                        {"window_found", window_found}});
+}
+
+void WebUI::PostHotkeyState(bool ok) {
+    PostWebMessageSafe({{"type", "hotkey"}, {"ok", ok}});
 }
 
 void WebUI::ResizeTo(RECT rc) {

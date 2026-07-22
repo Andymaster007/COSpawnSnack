@@ -15,12 +15,25 @@ std::filesystem::path AppDataConfigPath() {
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &buf))) {
         fs::path p(buf);
         CoTaskMemFree(buf);
-        p /= "CODMSpawnSnack";
+        p /= "COSpawnSnack";
         p /= "config.json";
         return p;
     }
     // Fallback to a local config.json if the shell API is unavailable.
     return "config.json";
+}
+
+std::filesystem::path AppDataDir() {
+    wchar_t* buf = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &buf))) {
+        fs::path p(buf);
+        CoTaskMemFree(buf);
+        p /= "COSpawnSnack";
+        std::error_code ec;
+        fs::create_directories(p, ec);
+        return p;
+    }
+    return ".";
 }
 
 std::shared_ptr<Config> LoadAppConfig() {

@@ -113,10 +113,13 @@ std::wstring BrowserVideoTarget::ResolveBrowserPath() const {
 
 std::wstring BrowserVideoTarget::BuildArgs() const {
     std::wstring a;
+    // Quote the URL: bare hosts and URLs containing shell-special characters
+    // (e.g. "&", spaces in query strings) must be wrapped so the command line
+    // is parsed as a single argument.
     if (app_mode_) {
-        a += L"--app=" + url_;
+        a += L"--app=\"" + url_ + L"\"";
     } else {
-        a += L"--new-window " + url_;
+        a += L"--new-window \"" + url_ + L"\"";
     }
     if (fullscreen_) {
         a += L" --start-maximized";
