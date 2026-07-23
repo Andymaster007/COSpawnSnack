@@ -242,6 +242,15 @@ void WebUI::HandleCommand(const std::string& json) {
                 bool ok = engine_->TestSwitch();
                 PostWebMessageSafe({{"type", "test"}, {"ok", ok}});
             }).detach();
+        } else if (cmd == "openUrl") {
+            // External links (GitHub / personal homepage): open in a real
+            // browser via the adapted-browser catalog (chrome-first fallback).
+            std::string url = j.value("url", std::string());
+            if (!url.empty()) {
+                bool ok = OpenUrlInBrowser(Utf8ToWide(url));
+                CSN_LOG_INFO("OpenUrl: " + url + " -> " +
+                             std::string(ok ? "launched" : "no browser / failed"));
+            }
         }
     } catch (const std::exception& e) {
         CSN_LOG_WARN("WebUI command parse error: " + std::string(e.what()));

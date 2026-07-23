@@ -11,6 +11,7 @@
 #include "core/app_config.h"
 #include "ui/app_window.h"
 #include "core/os_check.h"
+#include "core/browser_finder.h"
 #include "core/string_util.h"
 
 #include <Windows.h>
@@ -186,6 +187,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             return 1;
         }
         CSN_LOG_INFO("System version allowed to start.");
+
+        // Browser availability gate. The companion (open web page / video)
+        // feature needs Chrome or Edge. We don't block startup -- detection
+        // still works without a browser -- but we warn so the user isn't
+        // surprised when "切换" does nothing.
+        CSN_LOG_INFO("Checking for an adapted browser (Chrome / Edge)...");
+        if (!csn::AnyAdaptedBrowserInstalled()) {
+            CSN_LOG_WARN("No adapted browser (Chrome/Edge) found; companion "
+                         "features will be unavailable until one is installed.");
+            MessageBoxW(nullptr,
+                L"未检测到可用的浏览器（Chrome 或 Edge）。\n打开网页 / 视频等功能将不可用，请先安装其中之一。",
+                L"CO时间管理器", MB_OK | MB_ICONWARNING);
+        } else {
+            CSN_LOG_INFO("Adapted browser present; companion features available.");
+        }
 
 #ifdef _DEBUG
         if (cli_help) {

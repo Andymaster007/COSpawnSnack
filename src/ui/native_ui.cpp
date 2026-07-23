@@ -102,7 +102,7 @@ bool NativeUI::Create() {
     CreateWindowW(L"STATIC",
         L"提示：内置原生界面，无需任何额外下载或运行环境。",
         WS_CHILD | WS_VISIBLE, 20, 244, 840, 22, parent_, nullptr, hinst, nullptr);
-    CreateWindowW(L"STATIC", L"快捷键：F8 可随时 开始 / 停止 监控。",
+    CreateWindowW(L"STATIC", L"快捷键：F8 或 Ctrl+F8 可随时 开始 / 停止 监控。",
         WS_CHILD | WS_VISIBLE, 20, 270, 840, 22, parent_, nullptr, hinst, nullptr);
 
     UpdateStatus(engine_->IsRunning());

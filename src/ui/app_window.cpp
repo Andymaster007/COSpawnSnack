@@ -8,7 +8,8 @@
 namespace csn {
 
 const wchar_t kClassName[] = L"CODMSpawnSnackWindow";
-const int kHotkeyId = 1;
+const int kHotkeyId = 1;     // F8
+const int kHotkeyId2 = 2;    // Ctrl+F8 (fallback if F8 is occupied)
 
 AppWindow::AppWindow(std::shared_ptr<Engine> engine, std::shared_ptr<Config> config)
     : engine_(std::move(engine)), config_(std::move(config)) {}
@@ -95,16 +96,22 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (webui_) webui_->PostStatus(monitoring, window_found);
             });
             webui_->Initialize();
-            // Register a global F8 hotkey. If another program already owns F8
-            // (overlays, Afterburner, Discord, etc.) this silently fails; we log
-            // it and let the UI fall back to an in-page F8 listener (only active
-            // while our window is focused). The UI button always works.
+            // Register a global F8 hotkey, plus Ctrl+F8 as a fallback for when
+            // F8 is already owned by another program (overlays, Afterburner,
+            // Discord, etc.). Either one toggles monitoring. If BOTH fail we
+            // log it and let the UI fall back to an in-page listener (only
+            // active while our window is focused). The UI button always works.
             BOOL hotkeyOk = RegisterHotKey(hwnd_, kHotkeyId, 0, VK_F8);
-            if (!hotkeyOk) {
-                CSN_LOG_WARN("RegisterHotKey(F8) failed; global F8 hotkey unavailable. "
-                             "UI button still works; in-page F8 fallback enabled when focused.");
+            BOOL hotkeyCtrlOk = RegisterHotKey(hwnd_, kHotkeyId2, MOD_CONTROL, VK_F8);
+            if (!hotkeyOk && !hotkeyCtrlOk) {
+                CSN_LOG_WARN("RegisterHotKey(F8 / Ctrl+F8) failed; global hotkey "
+                             "unavailable. UI button still works; in-page F8 "
+                             "fallback enabled when focused.");
+            } else {
+                CSN_LOG_INFO("Global hotkey registered: F8=" + std::to_string(hotkeyOk) +
+                             " Ctrl+F8=" + std::to_string(hotkeyCtrlOk));
             }
-            webui_->SetHotkeyAvailable(hotkeyOk != 0);
+            webui_->SetHotkeyAvailable(hotkeyOk != 0 || hotkeyCtrlOk != 0);
             return 0;
         }
         case WM_SIZE: {
@@ -137,7 +144,7 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_HOTKEY: {
-            if (wParam == kHotkeyId) {
+            if (wParam == kHotkeyId || wParam == kHotkeyId2) {
                 if (engine_->IsRunning()) {
                     engine_->Stop();
                 } else {
@@ -148,6 +155,7 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_DESTROY: {
             UnregisterHotKey(hwnd_, kHotkeyId);
+            UnregisterHotKey(hwnd_, kHotkeyId2);
             engine_->Stop();
             PostQuitMessage(0);
             return 0;
