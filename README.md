@@ -1,4 +1,4 @@
-# CODMSpawnSnack · CO摸鱼管理器（COSpawnSnack）
+# CO摸鱼管理器（COSpawnSnack）
 
 > 🌐 [中文](README.md) · [English](README.en.md)
 
