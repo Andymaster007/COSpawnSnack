@@ -48,8 +48,6 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 
 **v1.2** — Added a prominent warning with install guidance when the Chinese OCR language pack is missing; added a toast when the browser fails to launch; enabled DPI awareness and per-system window scaling (fixes blurry / too-small UI on high-resolution displays); removed dead code.
 
-**v1.1** — About page rework, added disclaimer, browser adaptation with auto-fallback, `F8 / Ctrl+F8` dual hotkeys, external links open in the system browser, and startup OS/browser self-check.
-
 Full changelog: [Releases](https://github.com/Andymaster007/COSpawnSnack/releases).
 
 ## License
