@@ -32,7 +32,9 @@ public:
     void Initialize();
     void ResizeTo(RECT rc);
     // Push current state to the page (called on init and on engine status change).
-    void PostStatus(bool monitoring, bool window_found);
+    void PostStatus(bool monitoring, bool window_found, bool ocr_ok);
+    // Pushes a transient message that the page shows as a toast.
+    void PostToast(const std::string& msg);
     void PostConfig();
     // Records whether the global F8 hotkey was successfully registered. When it
     // failed (e.g. another app already owns F8), the page falls back to an

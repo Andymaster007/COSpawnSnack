@@ -1,5 +1,7 @@
 #pragma once
 #include <Windows.h>
+#include <functional>
+#include <string>
 
 namespace csn {
 
@@ -20,7 +22,10 @@ public:
     // window is intentionally NOT closed. Returns true on success.
     virtual bool Hide(HWND game_hwnd) = 0;
 
-    virtual bool IsRunning() const = 0;
+    // Optional launch-failure reporter. Default no-op so implementers that
+    // don't need it don't have to override.
+    virtual void SetErrorCallback(std::function<void(const std::string&)> /*cb*/) {}
+
     virtual ~IVideoTarget() = default;
 };
 

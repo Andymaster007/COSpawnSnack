@@ -104,8 +104,13 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             webui_ = std::make_unique<WebUI>(hwnd_, engine_.get(), config_);
             // Engine status changes are pushed to the active UI (WebView2 page,
             // or the native fallback if WebView2 is unavailable).
-            engine_->SetStatusCallback([this](bool monitoring, bool window_found) {
-                if (webui_) webui_->PostStatus(monitoring, window_found);
+            engine_->SetStatusCallback([this](bool monitoring, bool window_found, bool ocr_ok) {
+                if (webui_) webui_->PostStatus(monitoring, window_found, ocr_ok);
+            });
+            // Transient messages (e.g. browser-launch failure) are surfaced as
+            // toasts in the active UI.
+            engine_->SetMessageCallback([this](const std::string& m) {
+                if (webui_) webui_->PostToast(m);
             });
             webui_->Initialize();
             // Register a global F8 hotkey, plus Ctrl+F8 as a fallback for when

@@ -86,16 +86,6 @@ MediaController::MediaController(std::wstring browser_exe)
 
 MediaController::~MediaController() = default;
 
-bool MediaController::IsPlaying() {
-    auto s = FindSession(browser_exe_);
-    if (!s) return false;
-    try {
-        return MapStatus(s.GetPlaybackInfo().PlaybackStatus()) == PlaybackStatus::Playing;
-    } catch (...) {
-        return false;
-    }
-}
-
 void MediaController::Pause() {
     auto s = FindSession(browser_exe_);
     if (!s) {

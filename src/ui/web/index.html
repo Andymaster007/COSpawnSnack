@@ -66,6 +66,8 @@
   .hint { color: var(--muted); font-size: 12px; line-height: 1.7; }
   .hint b { color: var(--text); }
   .ocr-tip { color: var(--accent); margin-top: 10px; }
+  .ocr-warn { border-color: var(--accent); }
+  .ocr-warn h3 { color: var(--accent); margin: 0 0 10px; font-size: 15px; }
 
   /* ---------- main page ---------- */
   .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
@@ -163,7 +165,7 @@
         <button data-page="help">使用须知</button>
         <button data-page="about">关于</button>
       </nav>
-      <div class="foot">v1.1</div>
+      <div class="foot">v1.2</div>
     </aside>
 
     <main class="content">
@@ -177,6 +179,13 @@
           </div>
           <button id="mainBtn" class="main-btn">开始监控 (F8 / Ctrl+F8)</button>
           <div class="hint ocr-tip">注意：检测机制使用 OCR，请务必将局内按键透明度调至 100%！</div>
+        </div>
+        <div id="ocrWarn" class="card ocr-warn hidden">
+          <h3>⚠️ 未安装中文 OCR 语言包，检测已失效</h3>
+          <div class="hint">
+            阵亡后不会自动切出、复活后也不会切回游戏。<br />
+            请到「设置 → 时间和语言 → 语言 → 中文(简体) → 选项」查看是否有"光学字符识别"，没有就点"添加"，然后重启本程序。
+          </div>
         </div>
       </section>
 
@@ -257,6 +266,15 @@
               <li>热键：F8 主热键，若被占用可用 Ctrl+F8 触发</li>
               <li>外链（GitHub / 个人主页）改用系统浏览器打开（优先 Chrome）</li>
               <li>启动时检测是否已安装可用浏览器（Chrome / Edge）</li>
+            </ul>
+          </div>
+          <div class="changelog-item">
+            <div class="changelog-head">v1.2 <span class="changelog-date">· 2026.07.23</span></div>
+            <ul class="changelog-list">
+              <li>新增：未安装中文 OCR 语言包时，控制台弹出醒目警告并给出安装指引</li>
+              <li>新增：打开浏览器失败（如未安装）时弹出提示</li>
+              <li>优化：启用 DPI 感知并随系统缩放窗口，修复高分辨率下界面模糊 / 过小</li>
+              <li>清理：移除未使用的代码</li>
             </ul>
           </div>
         </div>
@@ -386,6 +404,17 @@
     btn.textContent = m ? "停止监控 (F8 / Ctrl+F8)" : "开始监控 (F8 / Ctrl+F8)";
     btn.classList.toggle("stop", m);
   }
+
+  let ocrWarned = false;
+  function applyOcr(ok) {
+    const el = $("ocrWarn");
+    if (el) el.classList.toggle("hidden", ok);
+    if (!ok && !ocrWarned) {
+      ocrWarned = true;
+      toast("未安装中文 OCR 语言包，检测已失效，请按使用须知安装后重启。");
+    }
+    if (ok) ocrWarned = false;
+  }
   $("mainBtn").addEventListener("click", () => {
     const next = !monitoring;
     if (post({ cmd: next ? "start" : "stop" })) {
@@ -418,6 +447,9 @@
       applyConfig(msg);
     } else if (msg.type === "status") {
       applyStatus(!!msg.monitoring, !!msg.window_found);
+      applyOcr(msg.ocr_ok !== false);
+    } else if (msg.type === "toast") {
+      toast(msg.msg);
     } else if (msg.type === "hotkey") {
       // 若全局热键注册失败（被别的程序占用），则在本窗口内监听 F8 / Ctrl+F8 兜底。
       if (msg.ok === false) {

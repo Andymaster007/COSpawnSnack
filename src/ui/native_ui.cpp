@@ -109,10 +109,11 @@ bool NativeUI::Create() {
     return true;
 }
 
-void NativeUI::UpdateStatus(bool monitoring) {
+void NativeUI::UpdateStatus(bool monitoring, bool ocr_ok) {
     if (!status_static_) return;
-    SetWindowTextW(status_static_,
-                   monitoring ? L"状态: 运行中 ▶" : L"状态: 未运行");
+    std::wstring s = monitoring ? L"状态: 运行中 ▶" : L"状态: 未运行";
+    if (!ocr_ok) s += L"（OCR 语言包缺失，检测已失效）";
+    SetWindowTextW(status_static_, s.c_str());
 }
 
 void NativeUI::SaveFromControls() {

@@ -23,7 +23,7 @@ public:
     bool Create();
 
     // Live status pushed from the Engine.
-    void UpdateStatus(bool monitoring);
+    void UpdateStatus(bool monitoring, bool ocr_ok = true);
 
     // Forwards a WM_COMMAND from the host window. Returns true if handled.
     bool HandleCommand(WPARAM wParam, LPARAM lParam);

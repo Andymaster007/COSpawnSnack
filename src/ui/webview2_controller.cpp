@@ -147,7 +147,7 @@ HRESULT WebUI::OnControllerCreated(HRESULT hr, ICoreWebView2Controller* controll
         Callback<ICoreWebView2NavigationCompletedEventHandler>(
             [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
                 PostConfig();
-                PostStatus(engine_->IsRunning(), engine_->IsWindowFound());
+                PostStatus(engine_->IsRunning(), engine_->IsWindowFound(), engine_->IsOcrOk());
                 PostHotkeyState(hotkey_ok_);
                 return S_OK;
             }).Get(),
@@ -306,14 +306,20 @@ void WebUI::PostConfig() {
     });
 }
 
-void WebUI::PostStatus(bool monitoring, bool window_found) {
+void WebUI::PostStatus(bool monitoring, bool window_found, bool ocr_ok) {
     if (native_ui_) {
-        native_ui_->UpdateStatus(monitoring);
+        native_ui_->UpdateStatus(monitoring, ocr_ok);
         return;
     }
     PostWebMessageSafe({{"type", "status"},
                         {"monitoring", monitoring},
-                        {"window_found", window_found}});
+                        {"window_found", window_found},
+                        {"ocr_ok", ocr_ok}});
+}
+
+void WebUI::PostToast(const std::string& msg) {
+    if (native_ui_) return;  // native fallback logs instead of showing toasts
+    PostWebMessageSafe({{"type", "toast"}, {"msg", msg}});
 }
 
 void WebUI::PostHotkeyState(bool ok) {

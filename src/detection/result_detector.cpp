@@ -72,6 +72,10 @@ void ResultDetector::SetUpscaleMinHeight(int height) {
     upscale_min_height_ = std::max(1, height);
 }
 
+bool ResultDetector::IsOcrAvailable() const {
+    return ocr_initialized_ && engine_ != nullptr;
+}
+
 void ResultDetector::DetectImplInit() {
     // Prefer a Chinese engine (the game shows 胜利/失败); fall back to the
     // user-profile language, then disable OCR if no engine is available.

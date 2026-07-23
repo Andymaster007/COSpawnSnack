@@ -27,7 +27,6 @@ public:
 
     bool Start(HWND hwnd, int fps, FrameCallback cb);
     void Stop();
-    bool IsRunning() const;
 
 private:
     bool InitWgc();

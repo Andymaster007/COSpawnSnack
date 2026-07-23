@@ -186,6 +186,7 @@ bool BrowserVideoTarget::LaunchAndCapture() {
                                      args.c_str(), nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<intptr_t>(result) <= 32) {
         CSN_LOG_ERROR("Failed to launch browser for video target.");
+        if (error_cb_) error_cb_("无法打开浏览器，请检查浏览器路径或是否已安装。");
         return false;
     }
 
@@ -280,8 +281,8 @@ bool BrowserVideoTarget::Hide(HWND game_hwnd) {
     return true;
 }
 
-bool BrowserVideoTarget::IsRunning() const {
-    return launched_ && hwnd_ != nullptr && IsWindow(hwnd_);
+void BrowserVideoTarget::SetErrorCallback(std::function<void(const std::string&)> cb) {
+    error_cb_ = std::move(cb);
 }
 
 } // namespace csn

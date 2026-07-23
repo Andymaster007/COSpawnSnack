@@ -31,9 +31,6 @@ public:
     explicit MediaController(std::wstring browser_exe);
     ~MediaController();
 
-    // True if a matching media session currently reports Playing.
-    bool IsPlaying();
-
     // Pause only if currently playing.
     void Pause();
     // Resume/start only if not currently playing.

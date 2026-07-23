@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace csn {
 
@@ -29,7 +30,10 @@ public:
 
     HWND Show(HWND game_hwnd) override;
     bool Hide(HWND game_hwnd) override;
-    bool IsRunning() const override;
+
+    // Optional callback invoked when the browser cannot be launched (e.g. the
+    // configured browser is missing). The Engine forwards it to the UI as a toast.
+    void SetErrorCallback(std::function<void(const std::string&)> cb) override;
 
 private:
     std::wstring ResolveBrowserPath() const;
@@ -51,6 +55,7 @@ private:
     HWND hwnd_ = nullptr;
     bool launched_ = false;   // a window has been opened at least once
     MediaController media_;   // reads/controls real playback state
+    std::function<void(const std::string&)> error_cb_;  // launch-failure reporter
 };
 
 } // namespace csn

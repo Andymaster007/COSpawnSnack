@@ -81,14 +81,4 @@ bool FocusController::SwitchToWindow(HWND hwnd) {
     return ok;
 }
 
-bool FocusController::SwitchToWindowByTitle(const std::wstring& title_substring) {
-    HWND hwnd = FindWindowByTitle(title_substring);
-    if (!hwnd) {
-        std::string narrow(title_substring.begin(), title_substring.end());
-        CSN_LOG_ERROR("Window not found: " + narrow);
-        return false;
-    }
-    return SwitchToWindow(hwnd);
-}
-
 } // namespace csn

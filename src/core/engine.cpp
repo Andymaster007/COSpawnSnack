@@ -22,6 +22,7 @@ bool Engine::Start() {
     if (running_.load()) return false;
     running_ = true;
     window_found_ = false;
+    ocr_ok_ = true;  // re-evaluate OCR availability on each fresh start
     NotifyStatus();  // push (monitoring=true, window_found=false) immediately
     thread_ = std::thread([this] { Worker(); });
     return true;
@@ -35,7 +36,11 @@ void Engine::Stop() {
 }
 
 void Engine::NotifyStatus() {
-    if (status_cb_) status_cb_(running_.load(), window_found_.load());
+    if (status_cb_) status_cb_(running_.load(), window_found_.load(), ocr_ok_.load());
+}
+
+void Engine::NotifyMessage(const std::string& m) {
+    if (msg_cb_) msg_cb_(m);
 }
 
 // Chrome/Edge refuse bare hosts like "example.com" in --app= mode and fall
@@ -107,6 +112,7 @@ void Engine::Worker() {
         if (!was_found) NotifyStatus();  // push (monitoring=true, window_found=true)
         CSN_LOG_INFO("Game window found; starting capture.");
 
+        bool ocr_reported = false;
         ScreenCapture capture;
         capture.Start(game_hwnd_, config_->capture_fps,
                       [&](const cv::Mat& frame, int, int, int) {
@@ -119,6 +125,13 @@ void Engine::Worker() {
                           }
 
                           RespawnText respawn = respawn_detector.Detect(scaled);
+                          if (!ocr_reported) {
+                              ocr_reported = true;
+                              if (!respawn_detector.IsOcrAvailable()) {
+                                  ocr_ok_ = false;
+                                  NotifyStatus();
+                              }
+                          }
                           // In-round banners ("炸弹已被安装" etc.) occupy the same
                           // area as the respawn hint and must not change state.
                           {
@@ -166,6 +179,7 @@ void Engine::EnsureVideoTarget() {
             config_->companion_app_mode,
             config_->companion_fullscreen,
             Utf8ToWide(config_->companion_browser_path));
+        video_target_->SetErrorCallback([this](const std::string& m) { NotifyMessage(m); });
         video_url_ = config_->companion_url;
         video_browser_ = config_->companion_browser_path;
     }

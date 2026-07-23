@@ -23,8 +23,13 @@ namespace csn {
 class Engine {
 public:
     // monitoring: whether the engine loop is running; window_found: whether
-    // the game window has been located yet (false while still waiting for it).
-    using StatusCallback = std::function<void(bool monitoring, bool window_found)>;
+    // the game window has been located yet (false while still waiting for it);
+    // ocr_ok: false when the OCR language pack is missing (result detection dead).
+    using StatusCallback = std::function<void(bool monitoring, bool window_found, bool ocr_ok)>;
+
+    // Transient user-facing messages (e.g. browser-launch failure) surfaced
+    // as toasts by the UI.
+    using MessageCallback = std::function<void(const std::string&)>;
 
     explicit Engine(std::shared_ptr<Config> config);
     ~Engine();
@@ -44,8 +49,14 @@ public:
     bool TestSwitch();
 
     void SetStatusCallback(StatusCallback cb) { status_cb_ = std::move(cb); }
-    // Pushes the current (monitoring, window_found) state to the UI callback.
+    void SetMessageCallback(MessageCallback cb) { msg_cb_ = std::move(cb); }
+
+    // Pushes the current (monitoring, window_found, ocr_ok) state to the UI.
     void NotifyStatus();
+    // Pushes a transient message to the UI (toast).
+    void NotifyMessage(const std::string& m);
+
+    bool IsOcrOk() const { return ocr_ok_.load(); }
 
     // UI-facing accessors for the companion (video) settings. Guarded by
     // video_config_mutex_ so concurrent worker reads stay safe.
@@ -64,6 +75,8 @@ private:
     std::atomic<bool> window_found_{false};
     std::thread thread_;
     StatusCallback status_cb_;
+    MessageCallback msg_cb_;
+    std::atomic<bool> ocr_ok_{true};
 
     FocusController focus_;
     std::unique_ptr<IVideoTarget> video_target_;

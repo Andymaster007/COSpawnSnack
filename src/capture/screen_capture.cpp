@@ -42,8 +42,6 @@ void ScreenCapture::Stop() {
     if (thread_.joinable()) thread_.join();
 }
 
-bool ScreenCapture::IsRunning() const { return running_; }
-
 void ScreenCapture::ThreadMain() {
     try {
         // Initialize a multi-threaded WinRT apartment for this thread. Both the WGC

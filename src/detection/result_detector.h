@@ -18,6 +18,10 @@ public:
     void SetConfidenceThreshold(double threshold);
     void SetUpscaleMinHeight(int height);
 
+    // True once OCR has been initialized AND a language engine is available.
+    // Exposed so the Engine can warn the UI when result detection is dead.
+    bool IsOcrAvailable() const;
+
     ResultText Detect(const cv::Mat& frame);
 
 private:
