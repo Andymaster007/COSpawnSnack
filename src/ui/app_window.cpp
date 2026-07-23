@@ -37,7 +37,7 @@ bool AppWindow::Create() {
     }
 
     hwnd_ = CreateWindowExW(
-        0, kClassName, L"CO时间管理器",
+        0, kClassName, L"CO摸鱼管理器",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 900, 580,
         nullptr, nullptr, hInstance, this);

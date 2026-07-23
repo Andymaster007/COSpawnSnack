@@ -103,5 +103,5 @@ endif()
 
 set_target_properties(CODMSpawnSnack PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    OUTPUT_NAME "CO时间管理器"
+    OUTPUT_NAME "CO摸鱼管理器"
 )

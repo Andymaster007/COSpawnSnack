@@ -183,7 +183,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             CSN_LOG_ERROR("System version not supported; refusing to start.");
             MessageBoxW(nullptr,
                 L"本软件需要 Windows 10 1803（build 17134）或更高版本。\n当前系统版本过低，无法运行。",
-                L"CO时间管理器", MB_OK | MB_ICONERROR);
+                L"CO摸鱼管理器", MB_OK | MB_ICONERROR);
             return 1;
         }
         CSN_LOG_INFO("System version allowed to start.");
@@ -198,7 +198,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                          "features will be unavailable until one is installed.");
             MessageBoxW(nullptr,
                 L"未检测到可用的浏览器（Chrome 或 Edge）。\n打开网页 / 视频等功能将不可用，请先安装其中之一。",
-                L"CO时间管理器", MB_OK | MB_ICONWARNING);
+                L"CO摸鱼管理器", MB_OK | MB_ICONWARNING);
         } else {
             CSN_LOG_INFO("Adapted browser present; companion features available.");
         }
@@ -208,8 +208,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             AllocConsole();
             freopen("CONOUT$", "w", stdout);
             std::cout << "Usage:\n"
-                      << "  CO时间管理器.exe\n"
-                      << "  CO时间管理器.exe --diagnose [--timeout <sec>]\n"
+                      << "  CO摸鱼管理器.exe\n"
+                      << "  CO摸鱼管理器.exe --diagnose [--timeout <sec>]\n"
                       << "\n"
                       << "--diagnose   Only detect and log; no focus/video switching.\n"
                       << "--timeout    Stop automatically after N seconds.\n"
