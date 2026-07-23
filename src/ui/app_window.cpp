@@ -3,6 +3,7 @@
 #include "ui/resource.h"
 #include "ui/webview2_controller.h"
 
+#include <ShellScalingApi.h>
 #include <string>
 
 namespace csn {
@@ -18,6 +19,17 @@ AppWindow::~AppWindow() = default;
 
 bool AppWindow::Create() {
     HINSTANCE hInstance = GetModuleHandleW(nullptr);
+
+    // Scale the initial window size to the system DPI so the window keeps a
+    // consistent physical size on high-DPI displays (125% / 150% / 200%
+    // scaling). With DPI awareness enabled, a fixed logical size like 900x580
+    // would otherwise render tiny on HiDPI screens.
+    const int kBaseWidth = 900;
+    const int kBaseHeight = 580;
+    UINT system_dpi = GetDpiForSystem();
+    if (system_dpi == 0) system_dpi = USER_DEFAULT_SCREEN_DPI;
+    int window_width = MulDiv(kBaseWidth, static_cast<int>(system_dpi), USER_DEFAULT_SCREEN_DPI);
+    int window_height = MulDiv(kBaseHeight, static_cast<int>(system_dpi), USER_DEFAULT_SCREEN_DPI);
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -39,7 +51,7 @@ bool AppWindow::Create() {
     hwnd_ = CreateWindowExW(
         0, kClassName, L"CO摸鱼管理器",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 900, 580,
+        CW_USEDEFAULT, CW_USEDEFAULT, window_width, window_height,
         nullptr, nullptr, hInstance, this);
 
     if (!hwnd_) {
@@ -118,6 +130,17 @@ LRESULT AppWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT rc{};
             GetClientRect(hwnd_, &rc);
             if (webui_) webui_->ResizeTo(rc);
+            return 0;
+        }
+        case WM_DPICHANGED: {
+            // The recommended rectangle for the new DPI is passed in lParam as a
+            // RECT*. Applying it triggers WM_SIZE, which resizes the WebView2
+            // controller to the new client rect so it re-renders at the new
+            // monitor's native pixel density instead of staying stretched.
+            RECT* prc = reinterpret_cast<RECT*>(lParam);
+            SetWindowPos(hwnd_, nullptr, prc->left, prc->top,
+                         prc->right - prc->left, prc->bottom - prc->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
             return 0;
         }
         case WM_COMMAND: {

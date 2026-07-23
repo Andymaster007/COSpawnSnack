@@ -15,6 +15,7 @@
 #include "core/string_util.h"
 
 #include <Windows.h>
+#include <ShellScalingApi.h>
 #include <memory>
 #include <string>
 #ifdef _DEBUG
@@ -155,6 +156,13 @@ void SaveCrop(const cv::Mat& frame, const csn::RationalRect& roi,
 } // namespace
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+    // Enable per-monitor DPI awareness BEFORE any window / WebView2 / COM
+    // creation. Without this, Windows treats the process as DPI-unaware and
+    // bitmap-stretches the whole window, making the WebView2 UI blurry on
+    // high-DPI / 4K displays. With it, WebView2 renders at the display's
+    // native pixel density (crisp), and WM_DPICHANGED (handled in
+    // AppWindow) re-renders correctly when dragged across monitors.
+    SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
     try {
         using namespace csn;
 
