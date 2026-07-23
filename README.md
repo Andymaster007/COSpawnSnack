@@ -1,5 +1,7 @@
 # CODMSpawnSnack · CO摸鱼管理器（COSpawnSnack）
 
+> 🌐 [中文](README.md) · [English](README.en.md)
+
 > 一个 Windows 小工具：我一死就自动切到设定好的网页，回合结束再自动切回来。
 
 ## 想法来源
