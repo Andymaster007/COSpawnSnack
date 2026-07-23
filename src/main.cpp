@@ -10,6 +10,8 @@
 #include "core/engine.h"
 #include "core/app_config.h"
 #include "ui/app_window.h"
+#include "core/os_check.h"
+#include "core/string_util.h"
 
 #include <Windows.h>
 #include <memory>
@@ -170,6 +172,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         logPath /= "codmspawn_snack.log";
         Logger::Instance().SetFile(logPath.string());
         CSN_LOG_INFO("CODMSpawnSnack starting.");
+
+        // OS compatibility gate. Must run before any WinRT / WebView2 / WGC
+        // initialization, which would otherwise crash on unsupported systems.
+        CSN_LOG_INFO("Checking system version...");
+        std::wstring osVersion = csn::GetOSVersionString();
+        CSN_LOG_INFO("System version: " + csn::WideToUtf8(osVersion));
+        if (!csn::IsSupportedOS()) {
+            CSN_LOG_ERROR("System version not supported; refusing to start.");
+            MessageBoxW(nullptr,
+                L"本软件需要 Windows 10 1803（build 17134）或更高版本。\n当前系统版本过低，无法运行。",
+                L"CO时间管理器", MB_OK | MB_ICONERROR);
+            return 1;
+        }
+        CSN_LOG_INFO("System version allowed to start.");
 
 #ifdef _DEBUG
         if (cli_help) {
