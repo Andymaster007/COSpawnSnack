@@ -24,8 +24,7 @@ public:
     void Update(const RespawnText& respawn, const ResultText& result);
     State GetState() const;
 
-    void SetConfig(int respawn_confirm_frames, int result_confirm_frames,
-                   int respawn_absent_frames);
+    void SetConfig(int respawn_confirm_frames, int result_confirm_frames);
 
 private:
     Dependencies deps_;
@@ -33,8 +32,6 @@ private:
 
     int respawn_confirm_frames_ = 0;
     int respawn_confirm_threshold_ = 5;
-    int respawn_absent_frames_ = 0;
-    int respawn_absent_threshold_ = 5;
 
     int result_confirm_frames_ = 0;
     int result_confirm_threshold_ = 2;

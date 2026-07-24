@@ -83,8 +83,7 @@ void Engine::Worker() {
     deps.switch_back_to_game = [this]() { SwitchBackToGame(); };
     deps.on_result_confirmed = []() {};
     StateMachine sm(deps);
-    sm.SetConfig(config_->respawn_confirm_frames, config_->result_confirm_frames,
-                 config_->respawn_absent_frames);
+    sm.SetConfig(config_->respawn_confirm_frames, config_->result_confirm_frames);
 
     // Polls until the game window appears (or Stop() is requested). While the
     // window is missing it keeps window_found_ false and notifies the UI, so
@@ -130,18 +129,6 @@ void Engine::Worker() {
                               if (!respawn_detector.IsOcrAvailable()) {
                                   ocr_ok_ = false;
                                   NotifyStatus();
-                              }
-                          }
-                          // In-round banners ("炸弹已被安装" etc.) occupy the same
-                          // area as the respawn hint and must not change state.
-                          {
-                              const std::string& t = respawn.raw_text;
-                              bool has_banner = t.find("炸弹") != std::string::npos ||
-                                                t.find("安装") != std::string::npos ||
-                                                t.find("拆除") != std::string::npos ||
-                                                t.find("排除") != std::string::npos;
-                              if (has_banner && !respawn.found) {
-                                  respawn.ignored = true;
                               }
                           }
                           ResultText result = result_detector.Detect(scaled);

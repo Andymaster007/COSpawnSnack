@@ -7,15 +7,18 @@ namespace csn {
 
 StateMachine::StateMachine(const Dependencies& deps) : deps_(deps) {}
 
-void StateMachine::SetConfig(int respawn_confirm_frames, int result_confirm_frames,
-                              int respawn_absent_frames) {
+void StateMachine::SetConfig(int respawn_confirm_frames, int result_confirm_frames) {
     respawn_confirm_threshold_ = respawn_confirm_frames;
     result_confirm_threshold_ = result_confirm_frames;
-    respawn_absent_threshold_ = respawn_absent_frames;
 }
 
 void StateMachine::Update(const RespawnText& respawn, const ResultText& result) {
     // ---- Round / match end detection (胜利/战败 etc.) ----
+    // This is the ONLY trigger that switches back to the game. A sustained
+    // absence of the respawn hint is intentionally NOT used to switch back,
+    // because in-round banners (e.g. a planted bomb) can blank the respawn-hint
+    // area and cause false switch-backs. The player therefore stays on video
+    // until the round / match actually ends.
     if (result.found) {
         ++result_confirm_frames_;
         result_absent_frames_ = 0;
@@ -28,10 +31,7 @@ void StateMachine::Update(const RespawnText& respawn, const ResultText& result) 
         if (!result_active_) {
             result_active_ = true;
             CSN_LOG_INFO("Result text confirmed; resetting round state.");
-            // Round over: the respawn hint is gone and the next round will start
-            // fresh, so clear any pending respawn state.
             respawn_confirm_frames_ = 0;
-            respawn_absent_frames_ = 0;
             if (state_ == State::OnVideo || state_ == State::InGame) {
                 if (deps_.switch_back_to_game) deps_.switch_back_to_game();
             }
@@ -51,24 +51,13 @@ void StateMachine::Update(const RespawnText& respawn, const ResultText& result) 
     }
 
     // ---- Respawn hint detection ("你将在下一回合重生") ----
-    // A noisy in-round banner (e.g. "炸弹已被安装" / "炸弹已被拆除") may replace
-    // the respawn hint in the same screen area for a few seconds. Such frames
-    // are marked ignored by the caller (main.cpp) and must NOT touch the
-    // respawn counters or the state at all -- the current state is preserved
-    // (stay in-game if we were in-game, stay on-video if we were on-video).
-    if (respawn.ignored) {
-        return;
-    }
-
+    // Respawn hint visible for N consecutive frames -> player is dead -> video.
     if (respawn.found) {
         ++respawn_confirm_frames_;
-        respawn_absent_frames_ = 0;
     } else {
         respawn_confirm_frames_ = 0;
-        ++respawn_absent_frames_;
     }
 
-    // Respawn hint visible for N consecutive frames -> player is dead -> video.
     if (respawn_confirm_frames_ >= respawn_confirm_threshold_) {
         if (state_ != State::OnVideo) {
             CSN_LOG_INFO("Respawn text confirmed; switching to video.");
@@ -76,24 +65,6 @@ void StateMachine::Update(const RespawnText& respawn, const ResultText& result) 
         }
         state_ = State::OnVideo;
         return;
-    }
-
-    // Respawn hint GONE for a sustained period -> the player is alive again
-    // (respawned next round, or the round/match ended without a readable
-    // 胜利/战败 banner). Switch back to the game.
-    //
-    // We require a LONG sustained absence (respawn_absent_threshold_ frames)
-    // so a single-frame OCR flicker does not bounce focus. Short-lived in-game
-    // banners are already filtered out upstream (ignored frames never reach
-    // this point), so only a real, sustained disappearance (actual respawn /
-    // round end) reaches this threshold.
-    if (respawn_absent_frames_ >= respawn_absent_threshold_) {
-        if (state_ == State::OnVideo) {
-            CSN_LOG_INFO("Respawn text gone (sustained); switching back to game.");
-            if (deps_.switch_back_to_game) deps_.switch_back_to_game();
-        }
-        respawn_confirm_frames_ = 0;
-        state_ = State::InGame;
     }
 }
 

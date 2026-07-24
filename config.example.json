@@ -35,10 +35,8 @@
   "state_machine": {
     "respawn_confirm_frames": 5,
     "result_confirm_frames": 2,
-    "respawn_absent_frames": 20,
     "_comment_respawn_confirm_frames": "Consecutive frames the respawn hint must persist before switching TO the video.",
-    "_comment_result_confirm_frames": "Consecutive frames 胜利/战败 must persist before switching back to the game.",
-    "_comment_respawn_absent_frames": "Consecutive frames the respawn hint must be GONE before switching back. Fires when you are alive again (respawned next round, or round/match ended). Keep high enough that a momentary OCR flicker or the '炸弹已被安装' banner (treated as still-dead) cannot trigger a premature switch-back. 20 @ 10fps ~= 2s."
+    "_comment_result_confirm_frames": "Consecutive frames 胜利/战败 must persist before switching back to the game."
   },
   "companion": {
     "url": "https://www.douyin.com",

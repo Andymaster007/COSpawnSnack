@@ -155,24 +155,22 @@ class OcrTextDetector:
 
 
 class StateMachine:
-    """Python port of src/state/state_machine.cpp with respawn-text logic."""
+    """Python port of src/state/state_machine.cpp — switch-back only on result text."""
     def __init__(self, logfn):
         self.log = logfn
         self.respawn_confirm_threshold = 5
         self.result_confirm_threshold = 2
-        self.respawn_absent_threshold = 5
         self.reset()
 
     def reset(self):
         self.respawn_confirm_frames = 0
-        self.respawn_absent_frames = 0
         self.result_confirm_frames = 0
         self.result_absent_frames = 0
         self.result_active = False
-        self.state = "Idle"  # Idle | InGame | OnVideo
+        self.state = "Idle"  # Idle | OnVideo
 
     def update(self, respawn_found, respawn_kw, result_found, result_kw):
-        # Result text (round/match end)
+        # Result text (round/match end) — the ONLY trigger that switches back.
         if result_found:
             self.result_confirm_frames += 1
             self.result_absent_frames = 0
@@ -185,7 +183,6 @@ class StateMachine:
                 self.result_active = True
                 self.log("[SM] Result text confirmed; resetting round state.")
                 self.respawn_confirm_frames = 0
-                self.respawn_absent_frames = 0
                 if self.state in ("OnVideo", "InGame"):
                     self.log("[SM] switching back to game (match/round end).")
                 self.state = "Idle"
@@ -194,24 +191,17 @@ class StateMachine:
         if self.result_absent_frames >= 90:
             self.result_active = False
 
-        # Respawn text (death vs alive)
+        # Respawn text (death -> video only; absence never switches back).
         if respawn_found:
             self.respawn_confirm_frames += 1
-            self.respawn_absent_frames = 0
         else:
             self.respawn_confirm_frames = 0
-            self.respawn_absent_frames += 1
 
         if self.respawn_confirm_frames >= self.respawn_confirm_threshold:
             if self.state != "OnVideo":
                 self.log("[SM] Respawn text confirmed; switching to video.")
             self.state = "OnVideo"
             return
-
-        if self.respawn_absent_frames >= self.respawn_absent_threshold:
-            if self.state == "OnVideo":
-                self.log("[SM] Respawn text gone; switching back to game.")
-            self.state = "InGame"
 
 
 def try_init_ocr():

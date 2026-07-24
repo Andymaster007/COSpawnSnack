@@ -55,7 +55,6 @@ bool LoadConfig(const fs::path& path, Config& out) {
         const auto& sm = j.value("state_machine", nlohmann::json::object());
         out.respawn_confirm_frames = sm.value("respawn_confirm_frames", 5);
         out.result_confirm_frames = sm.value("result_confirm_frames", 2);
-        out.respawn_absent_frames = sm.value("respawn_absent_frames", 20);
 
         // Read the companion section; fall back to the old "video" key for
         // backward compatibility with earlier configs.
@@ -103,8 +102,7 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
 
         j["state_machine"] = {
             {"respawn_confirm_frames", cfg.respawn_confirm_frames},
-            {"result_confirm_frames", cfg.result_confirm_frames},
-            {"respawn_absent_frames", cfg.respawn_absent_frames}
+            {"result_confirm_frames", cfg.result_confirm_frames}
         };
         j["companion"] = {
             {"url", cfg.companion_url},
@@ -148,8 +146,7 @@ nlohmann::json ConfigToJson(const Config& cfg) {
 
     j["state_machine"] = {
         {"respawn_confirm_frames", cfg.respawn_confirm_frames},
-        {"result_confirm_frames", cfg.result_confirm_frames},
-        {"respawn_absent_frames", cfg.respawn_absent_frames}
+        {"result_confirm_frames", cfg.result_confirm_frames}
     };
     j["companion"] = {
         {"url", cfg.companion_url},

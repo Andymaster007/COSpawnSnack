@@ -320,8 +320,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 emit(NowStamp() + " [SM] result confirmed -> round reset");
             };
             StateMachine diag_sm(diag_deps);
-            diag_sm.SetConfig(cfg.respawn_confirm_frames, cfg.result_confirm_frames,
-                              cfg.respawn_absent_frames);
+            diag_sm.SetConfig(cfg.respawn_confirm_frames, cfg.result_confirm_frames);
 
             capture.Start(game_hwnd, cfg.capture_fps, [&](const cv::Mat& frame, int, int, int) {
                 cv::Mat scaled;
@@ -332,19 +331,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
                 }
 
                 RespawnText respawn = respawn_detector.Detect(scaled);
-                // Same banner handling as the live path: "炸弹已被安装" etc. are
-                // noise and must not change the state. Mark the frame ignored so
-                // the diagnostic reflects the real decision (state preserved).
-                {
-                    const std::string& t = respawn.raw_text;
-                    bool has_banner = t.find("炸弹") != std::string::npos ||
-                                      t.find("安装") != std::string::npos ||
-                                      t.find("拆除") != std::string::npos ||
-                                      t.find("排除") != std::string::npos;
-                    if (has_banner && !respawn.found) {
-                        respawn.ignored = true;
-                    }
-                }
                 ResultText result = result_detector.Detect(scaled);
 
                 // Drive the real StateMachine so the diagnostic log reflects the

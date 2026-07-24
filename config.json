@@ -34,8 +34,7 @@
   },
   "state_machine": {
     "respawn_confirm_frames": 5,
-    "result_confirm_frames": 2,
-    "respawn_absent_frames": 20
+    "result_confirm_frames": 2
   },
   "companion": {
     "url": "https://www.douyin.com",

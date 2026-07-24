@@ -30,15 +30,6 @@ struct Config {
 
     int respawn_confirm_frames = 5;
     int result_confirm_frames = 2;
-    // Consecutive respawn-ABSENT frames required before switching back to the
-    // game. This fires when the player is alive again (respawned next round, or
-    // the round/match ended without a readable 胜利/战败 banner). Set it high
-    // enough that a single-frame OCR flicker -- or a transient in-round banner
-    // such as "炸弹已被安装" (the respawn detector treats that banner as "still
-    // present", so it does not even accumulate absence frames) -- cannot trigger
-    // a premature switch-back. 20 frames @ 10fps ~= 2 seconds of sustained
-    // absence is a safe default.
-    int respawn_absent_frames = 20;
 
     // Any web page opened while the player is dead (a "companion" page shown
     // during downtime). It can be a video site (Douyin / Bilibili / Kuaishou)
