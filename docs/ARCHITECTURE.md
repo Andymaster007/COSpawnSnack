@@ -100,10 +100,10 @@ public:
 };
 ```
 
-Default implementation: `ChromeDouyinTarget`. It:
+Default implementation: `BrowserVideoTarget`. It:
 
-1. Finds an existing Chrome window or launches one with `chrome --app=https://www.douyin.com`.
-2. Sends `Space` (or uses Chrome DevTools Protocol) to pause/resume the current video.
+1. Launches a dedicated, isolated browser process with `chrome --new-window <url>` under a fixed `--user-data-dir` (so it never touches your real browser and login state persists). The configured URL is opened only once, on first launch.
+2. Tracks the browser PROCESS (PID) and shows/hides ALL of its top-level windows, so video sites that spawn their own extra playback windows (Bilibili / Kuaishou) are handled correctly. Pause/resume is driven by the OS media session (GSMTC), not by simulating `Space`, so a manual user pause is never fought.
 3. Does not navigate away, so the same video stays loaded at the same progress.
 
 Future targets (Bilibili, Kuaishou, a native app) can be added by implementing the same interface.

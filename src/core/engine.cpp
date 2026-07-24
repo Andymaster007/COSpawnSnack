@@ -43,7 +43,7 @@ void Engine::NotifyMessage(const std::string& m) {
     if (msg_cb_) msg_cb_(m);
 }
 
-// Chrome/Edge refuse bare hosts like "example.com" in --app= mode and fall
+// Chrome/Edge refuse bare hosts like "example.com" (without a scheme) and fall
 // back to the browser home page (often baidu for zh-CN users), so always
 // prefix a missing scheme with https://. about:/file:/edge:/chrome: are left
 // untouched; an empty string stays empty (disables the companion entirely).
@@ -176,7 +176,6 @@ void Engine::EnsureVideoTarget() {
         video_browser_ != config_->companion_browser_path) {
         video_target_ = std::make_unique<BrowserVideoTarget>(
             Utf8ToWide(config_->companion_url),
-            config_->companion_app_mode,
             config_->companion_fullscreen,
             Utf8ToWide(config_->companion_browser_path));
         video_target_->SetErrorCallback([this](const std::string& m) { NotifyMessage(m); });

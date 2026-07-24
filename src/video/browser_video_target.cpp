@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <thread>
+#include <Windows.h>
 
 namespace csn {
 namespace fs = std::filesystem;
@@ -68,10 +69,17 @@ bool ForceForegroundImpl(HWND hwnd) {
 
 } // namespace
 
-BrowserVideoTarget::BrowserVideoTarget(std::wstring url, bool app_mode,
-                                         bool fullscreen, std::wstring browser_path)
+std::wstring BrowserVideoTarget::ProfileDir() {
+    // Fixed, isolated profile: never touches the user's real browser, and
+    // login state persists across runs. The fixed path also guarantees our
+    // --user-data-dir is a distinct Chrome singleton, so the PID we capture is
+    // always our own process (not an already-running instance).
+    return (fs::temp_directory_path() / L"COSpawnSnackCompanionProfile").wstring();
+}
+
+BrowserVideoTarget::BrowserVideoTarget(std::wstring url, bool fullscreen,
+                                         std::wstring browser_path)
     : url_(std::move(url)),
-      app_mode_(app_mode),
       fullscreen_(fullscreen),
       browser_path_(std::move(browser_path)),
       media_(BrowserExeName()) {}
@@ -116,14 +124,10 @@ std::wstring BrowserVideoTarget::BuildArgs() const {
     // Quote the URL: bare hosts and URLs containing shell-special characters
     // (e.g. "&", spaces in query strings) must be wrapped so the command line
     // is parsed as a single argument.
-    if (app_mode_) {
-        a += L"--app=\"" + url_ + L"\"";
-    } else {
-        a += L"--new-window \"" + url_ + L"\"";
-    }
-    if (fullscreen_) {
-        a += L" --start-maximized";
-    }
+    a += L"--new-window \"" + url_ + L"\"";
+    if (fullscreen_) a += L" --start-maximized";
+    // Isolated profile: distinct from the user's real browser, and persistent.
+    a += L" --user-data-dir=\"" + ProfileDir() + L"\"";
     a += L" --no-first-run --no-default-browser-check";
     return a;
 }
@@ -150,20 +154,31 @@ std::vector<std::wstring> BrowserVideoTarget::MatchKeywords() const {
     return kw;
 }
 
+std::vector<HWND> BrowserVideoTarget::EnumBrowserWindows() const {
+    std::vector<HWND> out;
+    if (!pid_) return out;
+    struct Ctx { DWORD pid; std::vector<HWND>* out; } ctx{pid_, &out};
+    EnumWindows([](HWND h, LPARAM lParam) -> BOOL {
+        auto* p = reinterpret_cast<Ctx*>(lParam);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        // Genuine top-level windows only (no owner), belonging to our PID.
+        if (pid == p->pid && GetWindow(h, GW_OWNER) == nullptr) {
+            p->out->push_back(h);
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    return out;
+}
+
 HWND BrowserVideoTarget::FindTargetWindow() const {
-    // 1) We already know our window handle -> reuse it (single-window guarantee).
-    if (hwnd_ && IsWindow(hwnd_)) {
-        return hwnd_;
-    }
-    // 2) Fallback: match an existing window by title keyword(s).
     auto kw = MatchKeywords();
     struct Ctx { const std::vector<std::wstring>* kw; HWND found = nullptr; } ctx{&kw, nullptr};
     EnumWindows([](HWND h, LPARAM lParam) -> BOOL {
         auto* p = reinterpret_cast<Ctx*>(lParam);
         wchar_t buf[256]{};
         if (GetWindowTextW(h, buf, 256) > 0 && IsWindowVisible(h)) {
-            std::wstring title(buf);
-            std::wstring low = ToLower(title);
+            std::wstring low = ToLower(std::wstring(buf));
             for (const auto& k : *p->kw) {
                 if (low.find(ToLower(k)) != std::wstring::npos) {
                     p->found = h;
@@ -179,74 +194,88 @@ HWND BrowserVideoTarget::FindTargetWindow() const {
 bool BrowserVideoTarget::LaunchAndCapture() {
     std::wstring browser = ResolveBrowserPath();
     std::wstring args = BuildArgs();
+    // Full command line: quoted exe + args. lpApplicationName is NULL so the
+    // executable is parsed from the first (quoted) token; this resolves both
+    // PATH-relative names (chrome.exe) and absolute paths correctly.
+    std::wstring cmd = L"\"" + browser + L"\" " + args;
 
-    CSN_LOG_INFO("Launching video window: " + WToN(browser) + " " + WToN(args));
+    CSN_LOG_INFO("Launching companion browser: " + WToN(browser) + " " + WToN(args));
 
-    HINSTANCE result = ShellExecuteW(nullptr, L"open", browser.c_str(),
-                                     args.c_str(), nullptr, SW_SHOWNORMAL);
-    if (reinterpret_cast<intptr_t>(result) <= 32) {
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi)) {
         CSN_LOG_ERROR("Failed to launch browser for video target.");
         if (error_cb_) error_cb_("无法打开浏览器，请检查浏览器路径或是否已安装。");
         return false;
     }
+    pid_ = pi.dwProcessId;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
 
-    // Chrome opens asynchronously; poll briefly to capture the new window.
+    known_windows_.clear();
     hwnd_ = nullptr;
-    for (int i = 0; i < 20; ++i) {
-        hwnd_ = FindTargetWindow();
-        if (hwnd_) break;
+    for (int i = 0; i < 40; ++i) {
+        auto mine = EnumBrowserWindows();
+        if (!mine.empty()) {
+            known_windows_ = mine;
+            hwnd_ = mine.front();
+            break;
+        }
+        // Fallback: a window matching our keywords may belong to a different PID
+        // if Chrome's singleton handed the URL to an already-running instance.
+        HWND fallback = FindTargetWindow();
+        if (fallback) {
+            DWORD owner = 0;
+            GetWindowThreadProcessId(fallback, &owner);
+            if (owner) pid_ = owner;
+            known_windows_ = {fallback};
+            hwnd_ = fallback;
+            break;
+        }
         Sleep(100);
     }
     launched_ = true;
-    if (!hwnd_) {
-        CSN_LOG_WARN("Video window launched but handle not captured yet; will retry on next show.");
-    }
-    return hwnd_ != nullptr;
-}
-
-void BrowserVideoTarget::Maximize(HWND hwnd) {
-    if (fullscreen_) {
-        if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-        ShowWindow(hwnd, SW_MAXIMIZE);
-    } else {
-        if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
-        ShowWindow(hwnd, SW_SHOW);
-    }
+    if (known_windows_.empty())
+        CSN_LOG_WARN("Companion browser launched but window not captured yet; will retry on next show.");
+    return !known_windows_.empty();
 }
 
 bool BrowserVideoTarget::ForceForeground(HWND hwnd) {
     return ForceForegroundImpl(hwnd);
 }
 
-bool BrowserVideoTarget::SendBehind(HWND hwnd, HWND game_hwnd) {
-    if (!game_hwnd || !IsWindow(game_hwnd)) {
-        // No game handle: just push to the very bottom of the z-order.
-        SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        return true;
-    }
-    // Place the video window directly below the game window so the game (which
-    // we then foreground) is always on top.
-    SetWindowPos(hwnd, game_hwnd, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    return true;
-}
-
 HWND BrowserVideoTarget::Show(HWND game_hwnd) {
-    if (!launched_ || !IsWindow(hwnd_)) {
+    if (!launched_ || pid_ == 0 || !IsWindow(hwnd_)) {
         if (!LaunchAndCapture()) {
             return nullptr;
         }
     }
-    if (!hwnd_) {
-        hwnd_ = FindTargetWindow();
+    // Re-enumerate: the site/user may have opened more windows since we last
+    // captured. We manage the WHOLE process, not a single window.
+    auto wins = EnumBrowserWindows();
+    if (wins.empty()) wins = known_windows_;
+    if (wins.empty()) {
+        HWND f = FindTargetWindow();
+        if (f) {
+            DWORD owner = 0;
+            GetWindowThreadProcessId(f, &owner);
+            if (owner) pid_ = owner;
+            wins = {f};
+        }
     }
-    if (!hwnd_ || !IsWindow(hwnd_)) {
-        CSN_LOG_ERROR("Video window handle invalid; cannot show.");
+    if (wins.empty()) {
+        CSN_LOG_ERROR("Companion window handle invalid; cannot show.");
         return nullptr;
     }
+    known_windows_ = wins;
+    hwnd_ = wins.front();
 
-    Maximize(hwnd_);
+    for (HWND h : wins) {
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        ShowWindow(h, SW_SHOW);
+    }
     ForceForeground(hwnd_);
 
     // Resume only if actually paused. MediaController reads the real GSMTC
@@ -263,11 +292,6 @@ HWND BrowserVideoTarget::Show(HWND game_hwnd) {
 }
 
 bool BrowserVideoTarget::Hide(HWND game_hwnd) {
-    if (!hwnd_ || !IsWindow(hwnd_)) {
-        // Nothing to hide.
-        return true;
-    }
-
     // Pause only if actually playing (reads real status via GSMTC).
     // Run GSMTC calls on a background thread so the main loop is never blocked
     // waiting for the session manager / async operations to complete.
@@ -276,8 +300,14 @@ bool BrowserVideoTarget::Hide(HWND game_hwnd) {
         media_.LogStatus("Hide");
     }).detach();
 
-    // Sink behind the game window; do NOT close.
-    SendBehind(hwnd_, game_hwnd);
+    // Hide every window the process owns (incl. any the site spawned). Re-enumerate
+    // to stay current; fall back to the last known set if enumeration is empty.
+    auto wins = EnumBrowserWindows();
+    if (wins.empty()) wins = known_windows_;
+    known_windows_ = wins;
+    for (HWND h : wins) {
+        if (h && IsWindow(h)) ShowWindow(h, SW_HIDE);
+    }
     return true;
 }
 

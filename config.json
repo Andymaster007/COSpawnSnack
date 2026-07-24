@@ -39,7 +39,6 @@
   },
   "companion": {
     "url": "https://www.douyin.com",
-    "app_mode": true,
     "fullscreen": true,
     "browser_path": ""
   },

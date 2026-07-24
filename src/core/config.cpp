@@ -67,7 +67,6 @@ bool LoadConfig(const fs::path& path, Config& out) {
             if (t == "chrome_kuaishou") out.companion_url = "https://www.kuaishou.com";
             else out.companion_url = "https://www.bilibili.com";
         }
-        out.companion_app_mode = comp.value("app_mode", true);
         out.companion_fullscreen = comp.value("fullscreen", true);
         out.companion_browser_path = comp.value("browser_path", std::string{"msedge.exe"});
 
@@ -109,7 +108,6 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
         };
         j["companion"] = {
             {"url", cfg.companion_url},
-            {"app_mode", cfg.companion_app_mode},
             {"fullscreen", cfg.companion_fullscreen},
             {"browser_path", cfg.companion_browser_path}
         };
@@ -155,7 +153,6 @@ nlohmann::json ConfigToJson(const Config& cfg) {
     };
     j["companion"] = {
         {"url", cfg.companion_url},
-        {"app_mode", cfg.companion_app_mode},
         {"fullscreen", cfg.companion_fullscreen},
         {"browser_path", cfg.companion_browser_path}
     };

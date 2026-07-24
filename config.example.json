@@ -42,13 +42,11 @@
   },
   "companion": {
     "url": "https://www.douyin.com",
-    "app_mode": true,
     "fullscreen": true,
     "browser_path": "",
     "_comment_url": "Any web page opened while you are dead (a 'companion' page for downtime). Video sites (Douyin/Bilibili/Kuaishou) get play/pause control; ANY other site (Xiaohongshu, a blog, an academic page) just opens and is shown/hidden with no side effects. Presets: Douyin https://www.douyin.com | Bilibili https://www.bilibili.com | Kuaishou https://www.kuaishou.com. Empty string disables companion switching entirely (you drive the page yourself).",
-    "_comment_app_mode": "true = open in Chrome app mode (borderless dedicated window, no address bar/tabs). false = normal browser window (--new-window).",
     "_comment_fullscreen": "true = maximize the companion window on show (fullscreen-window mode).",
-    "_comment_browser_path": "Optional explicit chrome.exe / msedge.exe path. Empty = 'chrome.exe' on PATH with common install-location fallbacks."
+    "_comment_browser_path": "Optional explicit chrome.exe / msedge.exe path. Empty = 'chrome.exe' on PATH with common install-location fallbacks. The companion opens in an isolated --user-data-dir so it never touches your real browser, and login state persists across runs."
   },
   "window": {
     "analysis_scale": 0.5,
