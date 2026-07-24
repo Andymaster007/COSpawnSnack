@@ -46,7 +46,7 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 
 ## 版本
 
-**v1.2** — 新增未安装中文 OCR 语言包时的醒目警告与安装指引；新增打开浏览器失败时的提示；清理未使用的代码。
+**v1.2** — 新增未安装中文 OCR 语言包时的醒目警告与安装指引；新增打开浏览器失败时的提示；清理未使用的代码；修复切视频时打开的浏览器改为按进程整体管理，兼容 B站/快手 新开窗口，自动暂停与续播不变。
 
 完整更新历史见 [Releases](https://github.com/Andymaster007/COSpawnSnack/releases)。
 

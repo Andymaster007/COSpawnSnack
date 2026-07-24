@@ -46,7 +46,7 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 
 ## Version
 
-**v1.2** — Added a prominent warning with install guidance when the Chinese OCR language pack is missing; added a toast when the browser fails to launch; removed dead code.
+**v1.2** — Added a prominent warning with install guidance when the Chinese OCR language pack is missing; added a toast when the browser fails to launch; removed dead code; fixed the browser opened for video watching to manage the whole browser process by window, so it now also handles windows that Bilibili/Kuaishou open mid-session while preserving auto pause/resume.
 
 Full changelog: [Releases](https://github.com/Andymaster007/COSpawnSnack/releases).
 
