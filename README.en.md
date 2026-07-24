@@ -2,7 +2,7 @@
 
 # COSpawnSnack (CO摸鱼管理器)
 
-> A CODM utility on Windows: the moment I die in-game, it automatically switches to a preset webpage, and switches back when the match ends (victory / defeat).
+> A CODM utility on Windows: the moment I die in-game, it automatically switches to a preset webpage, and switches back when the round ends.
 >
 > Currently only supports Search & Destroy mode.
 
