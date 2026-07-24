@@ -49,7 +49,7 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 
 ## Version
 
-**v1.3** — Reworked how the video browser window is managed: lock a single window by its title suffix and reuse your everyday browser instance; switched show/hide to a topmost overlay (fixing the red/unresponsive taskbar icon); media keys now scan all of that browser's media sessions for more precise pause/resume; added usage prerequisites to the notes; start/stop hotkey is now Ctrl+F8 only.
+**v1.3** — Reworked how the video browser window is managed: lock a single window by its title suffix and reuse your everyday browser instance; switched show/hide to a topmost overlay (fixing the red/unresponsive taskbar icon); media keys now scan all of that browser's media sessions for more precise pause/resume; added usage prerequisites to the notes; start/stop hotkey is now Ctrl+F8 only; fixed: switching back now triggers only on Victory/Defeat, eliminating false switch-backs from plant-bomb banners.
 
 Full changelog: [Releases](https://github.com/Andymaster007/COSpawnSnack/releases).
 
