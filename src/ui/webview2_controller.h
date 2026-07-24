@@ -36,9 +36,10 @@ public:
     // Pushes a transient message that the page shows as a toast.
     void PostToast(const std::string& msg);
     void PostConfig();
-    // Records whether the global F8 hotkey was successfully registered. When it
-    // failed (e.g. another app already owns F8), the page falls back to an
-    // in-page F8 listener so the key still works while the window is focused.
+    // Records whether the global Ctrl+F8 hotkey was successfully registered.
+    // When it failed (e.g. another app already owns Ctrl+F8), the page falls
+    // back to an in-page Ctrl+F8 listener so the key still works while the
+    // window is focused.
     void SetHotkeyAvailable(bool ok) { hotkey_ok_ = ok; }
     void PostHotkeyState(bool ok);
     // Actually performs PostWebMessageAsJson; runs on the main thread only

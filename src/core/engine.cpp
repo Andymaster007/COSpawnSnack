@@ -187,13 +187,15 @@ void Engine::EnsureVideoTarget() {
 void Engine::SwitchToVideo() {
     EnsureVideoTarget();
     if (!video_target_) return;
-    HWND v = video_target_->Show(game_hwnd_);
-    if (v) focus_.SwitchToWindow(v);
+    // The browser window is shown as a topmost layer above the still-foreground
+    // game (see BrowserVideoTarget::Show). No foreground stealing is needed.
+    video_target_->Show(game_hwnd_);
 }
 
 void Engine::SwitchBackToGame() {
+    // Hiding the topmost browser window reveals the game, which never lost the
+    // foreground. No focus switch is needed.
     if (video_target_) video_target_->Hide(game_hwnd_);
-    focus_.SwitchToWindow(game_hwnd_);
 }
 
 void Engine::SetCompanion(const std::string& url, const std::string& browser_path) {
@@ -225,11 +227,9 @@ bool Engine::TestSwitch() {
         CSN_LOG_WARN("TestSwitch: no companion URL configured; nothing to show.");
         return false;
     }
-    HWND v = video_target_->Show(hwnd);
-    if (v) focus_.SwitchToWindow(v);
+    video_target_->Show(hwnd);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     video_target_->Hide(hwnd);
-    focus_.SwitchToWindow(hwnd);
     CSN_LOG_INFO("TestSwitch: one show/hide cycle completed.");
     return true;
 }

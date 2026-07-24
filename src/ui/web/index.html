@@ -165,7 +165,7 @@
         <button data-page="help">使用须知</button>
         <button data-page="about">关于</button>
       </nav>
-      <div class="foot">v1.2</div>
+      <div class="foot">v1.3</div>
     </aside>
 
     <main class="content">
@@ -177,8 +177,9 @@
             <span id="statusDot" class="status-dot"></span>
             <span id="statusText" class="status-text">待机中</span>
           </div>
-          <button id="mainBtn" class="main-btn">开始监控 (F8 / Ctrl+F8)</button>
+          <button id="mainBtn" class="main-btn">开始监控 (Ctrl+F8)</button>
           <div class="hint ocr-tip">注意：检测机制使用 OCR，请务必将局内按键透明度调至 100%！</div>
+          <div class="hint ocr-tip">使用期间，请不要在指定浏览器里开其他能播放的网页。</div>
         </div>
         <div id="ocrWarn" class="card ocr-warn hidden">
           <h3>⚠️ 未安装中文 OCR 语言包，检测已失效</h3>
@@ -233,8 +234,9 @@
             <h4>怎么用</h4>
             <p>
               ① 在「配置」选好浏览器和要打开的网站（也能填自己的网址）；② 回「控制台」点「开始监控」；③ 正常打游戏；④ 想停就再点一次，或直接关窗口。<br />
-              热键：F8 或 Ctrl+F8 可随时开始 / 停止 监控（若所选浏览器未安装，程序会自动改用其他可用的浏览器）。
+              热键：Ctrl+F8 可随时开始 / 停止 监控。
             </p>
+            <p class="hint">使用期间，请减少指定浏览器的窗口数量，这可能会导致无法准确定位自动打开的网址的所在窗口。请勿在指定浏览器里开其他能播放的网页，会影响自动播放/暂停功能。</p>
           </div>
           <div class="help-block">
             <h4>测试一下</h4>
@@ -260,12 +262,13 @@
         <div class="card">
           <h3 class="about-subtitle">版本更新</h3>
           <div class="changelog-item">
-            <div class="changelog-head">v1.2 <span class="changelog-date">· 2026.07.24</span></div>
+            <div class="changelog-head">v1.3 <span class="changelog-date">· 2026.07.25</span></div>
             <ul class="changelog-list">
-              <li>新增：未安装中文 OCR 语言包时，控制台弹出醒目警告并给出安装指引</li>
-              <li>新增：打开浏览器失败（如未安装）时弹出提示</li>
-              <li>清理：移除未使用的代码</li>
-              <li>修复：切到视频时打开的浏览器改为按进程（PID）整体管理窗口，兼容 B站/快手 等在浏览过程中另行打开窗口的场景；自动暂停与续播逻辑保持不变</li>
+              <li>重构：切视频的浏览器窗口改为按标题后缀（- Google Chrome / - Microsoft Edge）锁定单个窗口，新开标签页随主窗口一起显示 / 隐藏；去掉隔离的用户数据目录，复用你日常使用的浏览器（启动方式等同于双击新开窗口）。</li>
+              <li>修复：切出 / 切回改用 topmost 覆盖（切出置顶浮于游戏之上、切回取消置顶并最小化），不再抢焦点、不再强制置前，避免任务栏图标变红 / 无响应。</li>
+              <li>改进：媒体键（系统媒体传输控制）改为扫描该浏览器的全部媒体会话——暂停时只暂停正在播放的（绝不把已暂停的变成播放），续播时只播放第一个处于暂停的会话，关闭更精准。</li>
+              <li>新增：使用须知增加使用前提提醒——使用期间请减少指定浏览器的窗口数量，且请勿在指定浏览器里开其他能播放的网页（会影响自动播放 / 暂停）。</li>
+              <li>调整：开始 / 停止监控的热键由「F8 或 Ctrl+F8」改为仅「Ctrl+F8」。</li>
             </ul>
           </div>
         </div>
@@ -392,7 +395,7 @@
     if (m) label = wf ? "监控中（检测到游戏窗口）" : "监控中（未检测到游戏窗口）";
     $("statusText").textContent = label;
     const btn = $("mainBtn");
-    btn.textContent = m ? "停止监控 (F8 / Ctrl+F8)" : "开始监控 (F8 / Ctrl+F8)";
+    btn.textContent = m ? "停止监控 (Ctrl+F8)" : "开始监控 (Ctrl+F8)";
     btn.classList.toggle("stop", m);
   }
 
@@ -442,17 +445,16 @@
     } else if (msg.type === "toast") {
       toast(msg.msg);
     } else if (msg.type === "hotkey") {
-      // 若全局热键注册失败（被别的程序占用），则在本窗口内监听 F8 / Ctrl+F8 兜底。
+      // 若全局 Ctrl+F8 热键注册失败（被别的程序占用），则在本窗口内监听 Ctrl+F8 兜底。
       if (msg.ok === false) {
         window.addEventListener("keydown", (ev) => {
-          const isF8 = ev.key === "F8" || ev.keyCode === 119;
           const isCtrlF8 = ev.ctrlKey && (ev.key === "F8" || ev.keyCode === 119);
-          if (isF8 || isCtrlF8) {
+          if (isCtrlF8) {
             ev.preventDefault();
             if (post({ cmd: "toggle" })) applyStatus(!monitoring, windowFound); // 乐观更新
           }
         });
-        toast("提示：全局热键被占用，已改用窗口内 F8 / Ctrl+F8（需本程序在前台）。");
+        toast("提示：全局热键被占用，已改用窗口内 Ctrl+F8（需本程序在前台）。");
       }
     } else if (msg.type === "test") {
       if (msg.phase === "start") {

@@ -430,7 +430,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         // ============ UI mode ============
         // The Engine only runs while the
-        // user has monitoring enabled (Start/Stop via the UI or the F8 hotkey).
+        // user has monitoring enabled (Start/Stop via the UI or the Ctrl+F8 hotkey).
         // Closing the window stops the engine and exits the process.
 
         // WebView2 requires the thread that creates the environment/controller

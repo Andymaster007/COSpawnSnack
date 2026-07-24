@@ -8,22 +8,21 @@
 
 namespace csn {
 
-// Opens any web page (Douyin / Bilibili / Kuaishou / Xiaohongshu / a blog /
-// an academic site / ...) in a SEPARATE, isolated browser process and manages
-// that whole process for the session:
-//   - Show():  launch on first use (opens the configured URL ONCE), then show
-//              + bring to front + resume ALL top-level windows of the process.
-//   - Hide():  pause playback, then hide ALL top-level windows of the process.
+// Opens the configured web page (Douyin / Bilibili / Kuaishou / a blog / ...) in
+// the USER'S EVERYDAY browser (no isolated profile) and shows/hides THAT window
+// when switching:
+//   - Show(): launch on first use (opens the configured URL ONCE), then show
+//              + float above the game as a topmost layer + resume playback.
+//   - Hide():  pause playback, then minimize the window (stays in Alt+Tab).
 //              Never closes it.
 //
-// Why per-process (not per-window): video sites (Bilibili / Kuaishou) often
-// spawn their OWN additional top-level windows for playback. By tracking the
-// browser PROCESS (PID) and toggling every window it owns, we stay robust no
-// matter how many windows the site or the user opens. The browser manages its
-// own internal layout; we only show/hide the whole instance.
-//
-// The browser runs under a FIXED, isolated --user-data-dir so it never touches
-// the user's real Chrome/Edge, and the profile persists login state across runs.
+// Window location: we locate the browser window by its stable title suffix
+// ("- Google Chrome" / "- Microsoft Edge"), which is independent of the page
+// being viewed. We lock the first matching top-level window (class
+// Chrome_WidgetWin_1) and keep operating on it; tabs opened inside the same
+// window ride along automatically. Because we reuse the user's real browser,
+// the caller MUST ensure no OTHER playable page is open in that browser during
+// a session, otherwise playback pause/resume may affect the wrong tab.
 class BrowserVideoTarget : public IVideoTarget {
 public:
     // url         : any web page URL, e.g. https://www.douyin.com
@@ -40,24 +39,20 @@ public:
     void SetErrorCallback(std::function<void(const std::string&)> cb) override;
 
 private:
-    static std::wstring ProfileDir();
     std::wstring ResolveBrowserPath() const;
     std::wstring BrowserExeName() const;
     std::wstring BuildArgs() const;
     std::vector<std::wstring> MatchKeywords() const;
 
-    std::vector<HWND> EnumBrowserWindows() const;
     HWND FindTargetWindow() const;
     bool LaunchAndCapture();
-    bool ForceForeground(HWND hwnd);
 
     std::wstring url_;
     bool fullscreen_;
     std::wstring browser_path_;
 
-    DWORD pid_ = 0;                    // browser process we launched
-    HWND hwnd_ = nullptr;              // a representative window (for foreground)
-    std::vector<HWND> known_windows_;  // all top-level windows of pid_
+    DWORD pid_ = 0;                    // owning process of the locked window
+    HWND hwnd_ = nullptr;              // the single browser window we manage
     bool launched_ = false;            // a window has been opened at least once
     MediaController media_;            // reads/controls real playback state
     std::function<void(const std::string&)> error_cb_;  // launch-failure reporter

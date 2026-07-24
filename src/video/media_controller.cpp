@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 namespace csn {
 
@@ -52,31 +53,30 @@ const char* StatusName(PlaybackStatus s) {
     }
 }
 
-// Find the media session belonging to our browser. Prefer a session whose
-// SourceAppUserModelId contains the browser app-id; if none matches but exactly
-// one session exists system-wide, use it as a fallback.
-GlobalSystemMediaTransportControlsSession FindSession(const std::wstring& browser_exe) {
+// Enumerate ALL media sessions belonging to our browser. Matches every session
+// whose SourceAppUserModelId contains the browser app-id (e.g. "Chrome" / the
+// Edge AUMID). Returns all matches so callers can pause/play precisely across
+// the multiple tabs/pages that may be playing in the user's everyday browser.
+std::vector<GlobalSystemMediaTransportControlsSession> FindSessions(const std::wstring& browser_exe) {
     std::wstring want = AppIdSubstring(browser_exe);
+    std::vector<GlobalSystemMediaTransportControlsSession> out;
     try {
         auto manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        if (!manager) return nullptr;
+        if (!manager) return out;
         auto sessions = manager.GetSessions();
-        GlobalSystemMediaTransportControlsSession fallback{ nullptr };
         for (const auto& s : sessions) {
             std::wstring app = ToLower(std::wstring(s.SourceAppUserModelId().c_str()));
             if (!app.empty() && app.find(want) != std::wstring::npos) {
-                return s;
+                out.push_back(s);
             }
-            if (!fallback) fallback = s;
         }
-        if (sessions.Size() == 1) return fallback;
     } catch (const winrt::hresult_error& e) {
         CSN_LOG_WARN("MediaController: GSMTCS query failed: code " +
                      std::to_string(static_cast<int>(e.code())));
     } catch (...) {
         CSN_LOG_WARN("MediaController: GSMTCS query threw an exception.");
     }
-    return nullptr;
+    return out;
 }
 
 } // namespace
@@ -87,62 +87,75 @@ MediaController::MediaController(std::wstring browser_exe)
 MediaController::~MediaController() = default;
 
 void MediaController::Pause() {
-    auto s = FindSession(browser_exe_);
-    if (!s) {
+    auto sessions = FindSessions(browser_exe_);
+    if (sessions.empty()) {
         // Expected for non-video companion pages (blogs, academic sites, ...):
         // there is simply nothing to pause. Not an error.
         CSN_LOG_INFO("MediaController::Pause: no media session found (nothing playing).");
         return;
     }
-    try {
-        PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
-        if (st == PlaybackStatus::Playing) {
-            s.TryPauseAsync().get();
-            CSN_LOG_INFO("MediaController: sent Pause (was Playing).");
-        } else {
-            CSN_LOG_INFO(std::string("MediaController: Pause skipped (status=") +
-                         StatusName(st) + ", already not playing).");
+    // Pause every session that is currently Playing. Already-paused sessions
+    // are never touched, so we never accidentally resume something the user
+    // paused manually. This keeps "pause" accurate even when several tabs in
+    // the browser are playing media.
+    int paused = 0;
+    for (const auto& s : sessions) {
+        try {
+            PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
+            if (st == PlaybackStatus::Playing) {
+                s.TryPauseAsync().get();
+                ++paused;
+            }
+        } catch (const winrt::hresult_error& e) {
+            CSN_LOG_WARN("MediaController::Pause failed: code " +
+                         std::to_string(static_cast<int>(e.code())));
+        } catch (...) {
+            CSN_LOG_WARN("MediaController::Pause threw an exception.");
         }
-    } catch (const winrt::hresult_error& e) {
-        CSN_LOG_WARN("MediaController::Pause failed: code " +
-                     std::to_string(static_cast<int>(e.code())));
-    } catch (...) {
-        CSN_LOG_WARN("MediaController::Pause threw an exception.");
     }
+    CSN_LOG_INFO("MediaController: Pause sent to " + std::to_string(paused) +
+                 " playing session(s) of " + std::to_string(sessions.size()) + " total.");
 }
 
 void MediaController::Play() {
-    auto s = FindSession(browser_exe_);
-    if (!s) {
+    auto sessions = FindSessions(browser_exe_);
+    if (sessions.empty()) {
         // Expected for non-video companion pages: nothing to play.
         CSN_LOG_INFO("MediaController::Play: no media session found (nothing to play).");
         return;
     }
-    try {
-        PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
-        if (st != PlaybackStatus::Playing) {
-            s.TryPlayAsync().get();
-            CSN_LOG_INFO("MediaController: sent Play (was " + std::string(StatusName(st)) + ").");
-        } else {
-            CSN_LOG_INFO("MediaController: Play skipped (already Playing).");
+    // Resume only the FIRST session that is Paused; if none is paused (all are
+    // already playing or stopped), do nothing. This avoids resuming the wrong
+    // tab when several playable pages are open — landing on the right one
+    // depends on the user keeping a single playable page open (or luck).
+    for (const auto& s : sessions) {
+        try {
+            PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
+            if (st == PlaybackStatus::Paused) {
+                s.TryPlayAsync().get();
+                CSN_LOG_INFO("MediaController: sent Play (was Paused).");
+                return;
+            }
+        } catch (const winrt::hresult_error& e) {
+            CSN_LOG_WARN("MediaController::Play failed: code " +
+                         std::to_string(static_cast<int>(e.code())));
+        } catch (...) {
+            CSN_LOG_WARN("MediaController::Play threw an exception.");
         }
-    } catch (const winrt::hresult_error& e) {
-        CSN_LOG_WARN("MediaController::Play failed: code " +
-                     std::to_string(static_cast<int>(e.code())));
-    } catch (...) {
-        CSN_LOG_WARN("MediaController::Play threw an exception.");
     }
+    CSN_LOG_INFO("MediaController::Play skipped (no paused session found).");
 }
 
 void MediaController::LogStatus(const char* context) {
-    auto s = FindSession(browser_exe_);
-    if (!s) {
+    auto sessions = FindSessions(browser_exe_);
+    if (sessions.empty()) {
         CSN_LOG_INFO(std::string(context) + ": no media session found.");
         return;
     }
     try {
-        PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
-        CSN_LOG_INFO(std::string(context) + ": media status = " + StatusName(st));
+        PlaybackStatus st = MapStatus(sessions[0].GetPlaybackInfo().PlaybackStatus());
+        CSN_LOG_INFO(std::string(context) + ": " + std::to_string(sessions.size()) +
+                     " session(s), first = " + StatusName(st));
     } catch (...) {
         CSN_LOG_INFO(std::string(context) + ": media status query failed.");
     }

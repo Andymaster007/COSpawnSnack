@@ -47,38 +47,4 @@ HWND FocusController::FindWindowByTitle(const std::wstring& title_substring) {
     }
 }
 
-bool FocusController::SwitchToWindow(HWND hwnd) {
-    if (!IsWindow(hwnd)) return false;
-
-    DWORD target_thread = GetWindowThreadProcessId(hwnd, nullptr);
-    DWORD current_thread = GetCurrentThreadId();
-
-    if (target_thread != current_thread) {
-        AttachThreadInput(current_thread, target_thread, TRUE);
-    }
-
-    UINT flash = 0;
-    SystemParametersInfoW(SPI_GETFOREGROUNDFLASHCOUNT, 0, &flash, 0);
-    SystemParametersInfoW(SPI_SETFOREGROUNDFLASHCOUNT, 0, nullptr, SPIF_SENDCHANGE);
-
-    bool ok = SetForegroundWindow(hwnd) != FALSE;
-
-    SystemParametersInfoW(SPI_SETFOREGROUNDFLASHCOUNT, flash, nullptr, SPIF_SENDCHANGE);
-
-    if (target_thread != current_thread) {
-        AttachThreadInput(current_thread, target_thread, FALSE);
-    }
-
-    if (!ok) {
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        AllowSetForegroundWindow(ASFW_ANY);
-        ok = SetForegroundWindow(hwnd) != FALSE;
-    }
-
-    if (!ok) {
-        CSN_LOG_ERROR("Failed to set foreground window.");
-    }
-    return ok;
-}
-
 } // namespace csn

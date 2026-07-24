@@ -9,7 +9,7 @@
 namespace csn {
 
 // The single visible window. Hosts the WebView2 UI (with a native Win32
-// fallback), registers the F8 global hotkey, and owns the Engine lifecycle
+// fallback), registers the Ctrl+F8 global hotkey, and owns the Engine lifecycle
 // (stop on close).
 class AppWindow {
 public:

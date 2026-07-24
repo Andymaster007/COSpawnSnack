@@ -41,12 +41,13 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 ## Usage Notes
 
 - Detection is OCR-based, so please set the **in-game control opacity to 100%**, otherwise recognition may fail.
+- During use, do NOT open other playable pages in the selected browser (otherwise pause/resume may affect the wrong video).
 - Currently **only Search & Destroy mode** is supported; Battle Royale is out of scope for this version.
-- Press `F8` or `Ctrl+F8` to start / stop monitoring.
+- Press `Ctrl+F8` to start / stop monitoring.
 
 ## Version
 
-**v1.2** — Added a prominent warning with install guidance when the Chinese OCR language pack is missing; added a toast when the browser fails to launch; removed dead code; fixed the browser opened for video watching to manage the whole browser process by window, so it now also handles windows that Bilibili/Kuaishou open mid-session while preserving auto pause/resume.
+**v1.3** — Reworked how the video browser window is managed: lock a single window by its title suffix and reuse your everyday browser instance; switched show/hide to a topmost overlay (fixing the red/unresponsive taskbar icon); media keys now scan all of that browser's media sessions for more precise pause/resume; added usage prerequisites to the notes; start/stop hotkey is now Ctrl+F8 only.
 
 Full changelog: [Releases](https://github.com/Andymaster007/COSpawnSnack/releases).
 
