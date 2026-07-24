@@ -4,7 +4,7 @@
 
 > A CODM utility on Windows: the moment I die in-game, it automatically switches to a preset webpage, and switches back when the round ends.
 >
-> Currently only supports Classic Bomb mode.
+> Currently only supports Search & Destroy mode.
 
 ## The Idea
 
@@ -26,7 +26,7 @@ The whole process reads no memory and injects nothing into the game — it only 
 - **Pure visual detection** — Only external screen recognition; reads and modifies no game memory, avoiding injection-style anti-cheat risks.
 - **No lost video progress** — When switching back to the game the video is merely paused, so when you return it's the same clip at the same timestamp.
 - **Browser adaptation** — Prefers the browser you select, and automatically falls back to another installed supported browser if that one isn't present (Chrome first, then Edge).
-- **Dual hotkeys** — `F8` to start / stop monitoring at any time; if `F8` is taken by another program, `Ctrl+F8` is available as a backup.
+- **Single hotkey** — Press `Ctrl+F8` to start / stop monitoring at any time.
 - **Startup self-check** — On launch it checks the Windows version and available browsers, and shows a Chinese prompt if requirements aren't met.
 - **Single-file exe** — Statically linked with an embedded WebView2 UI; just double-click to run.
 
