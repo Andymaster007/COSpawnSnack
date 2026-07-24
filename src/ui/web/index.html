@@ -68,6 +68,7 @@
   .ocr-tip { color: var(--accent); margin-top: 10px; }
   .ocr-warn { border-color: var(--accent); }
   .ocr-warn h3 { color: var(--accent); margin: 0 0 10px; font-size: 15px; }
+  .ocr-warn-line { color: var(--accent); margin-top: 10px; font-weight: 600; }
 
   /* ---------- main page ---------- */
   .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
@@ -180,6 +181,7 @@
           <button id="mainBtn" class="main-btn">开始监控 (Ctrl+F8)</button>
           <div class="hint ocr-tip">注意：检测机制使用 OCR，请务必将局内按键透明度调至 100%！</div>
           <div class="hint ocr-tip">使用期间，请不要在指定浏览器里开其他能播放的网页。</div>
+          <div class="hint ocr-warn-line">⚠️ 暂时仅支持经典爆破。</div>
         </div>
         <div id="ocrWarn" class="card ocr-warn hidden">
           <h3>⚠️ 未安装中文 OCR 语言包，检测已失效</h3>
