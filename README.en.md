@@ -2,7 +2,9 @@
 
 # COSpawnSnack (CO摸鱼管理器)
 
-> A small Windows utility: the moment I die in-game, it automatically switches to a preset webpage, and switches back when the round ends.
+> A CODM utility on Windows: the moment I die in-game, it automatically switches to a preset webpage, and switches back when the round ends.
+>
+> Currently only supports Classic Bomb mode.
 
 ## The Idea
 
