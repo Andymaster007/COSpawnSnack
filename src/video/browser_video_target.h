@@ -28,12 +28,8 @@ public:
     // url         : any web page URL, e.g. https://www.douyin.com
     // fullscreen  : maximize the window on show (fullscreen-window mode)
     // browser_path: explicit chrome/edge exe; empty -> "chrome.exe" on PATH
-    // cdp_port    : remote-debugging port the browser is launched with (CDP)
-    // video_host  : optional URL-substring filter for CDP play/pause control
     BrowserVideoTarget(std::wstring url, bool fullscreen,
-                       std::wstring browser_path = {},
-                       int cdp_port = 9222,
-                       std::string video_host = "");
+                       std::wstring browser_path = {});
 
     HWND Show(HWND game_hwnd) override;
     bool Hide(HWND game_hwnd) override;
@@ -54,8 +50,6 @@ private:
     std::wstring url_;
     bool fullscreen_;
     std::wstring browser_path_;
-    int cdp_port_ = 9222;
-    std::string video_host_;
 
     DWORD pid_ = 0;                    // owning process of the locked window
     HWND hwnd_ = nullptr;              // the single browser window we manage

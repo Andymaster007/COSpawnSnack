@@ -45,15 +45,6 @@ struct Config {
     // common install-location fallbacks. Default is Edge (msedge.exe).
     std::string companion_browser_path = "msedge.exe";
 
-    // Chrome DevTools Protocol (CDP) control of the companion browser. The
-    // browser is launched with --remote-debugging-port=<cdp_port>, letting us
-    // drive play/pause directly via CDP (background / paused / live tabs that
-    // GSMTC cannot see). Falls back to GSMTC if the port is not reachable.
-    int cdp_port = 9222;
-    // If non-empty, only page tabs whose URL contains this substring (e.g.
-    // "bilibili.com") are controlled. Empty = control every page tab.
-    std::string video_host = "";
-
     int focus_switch_back_delay_ms = 100;
 
     // When true, the program only detects (respawn + result text) and logs every

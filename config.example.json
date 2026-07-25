@@ -44,13 +44,7 @@
     "browser_path": "",
     "_comment_url": "Any web page opened while you are dead (a 'companion' page for downtime). Video sites (Douyin/Bilibili/Kuaishou) get play/pause control; ANY other site (Xiaohongshu, a blog, an academic page) just opens and is shown/hidden with no side effects. Presets: Douyin https://www.douyin.com | Bilibili https://www.bilibili.com | Kuaishou https://www.kuaishou.com. Empty string disables companion switching entirely (you drive the page yourself).",
     "_comment_fullscreen": "true = maximize the companion window on show (fullscreen-window mode).",
-    "_comment_browser_path": "Optional explicit chrome.exe / msedge.exe path. Empty = 'chrome.exe' on PATH with common install-location fallbacks. The companion opens in an isolated --user-data-dir so it never touches your real browser, and login state persists across runs."
-  },
-  "media": {
-    "cdp_port": 9222,
-    "video_host": "",
-    "_comment_cdp_port": "The companion browser is launched with --remote-debugging-port=<cdp_port>. Play/pause is driven via the Chrome DevTools Protocol (CDP), which can reach background / paused / live tabs that the old GSMTC approach could not. If the port is unreachable (e.g. the browser was already open without remote debugging), it falls back to GSMTC.",
-    "_comment_video_host": "Optional URL-substring filter: only page tabs whose URL contains this string are controlled (e.g. 'bilibili.com'). Empty = control every page tab. Leave empty unless you specifically want to limit scope."
+    "_comment_browser_path": "Optional explicit chrome.exe / msedge.exe path. Empty = 'chrome.exe' on PATH with common install-location fallbacks. The companion opens in a new window of your everyday browser (no isolated profile), reusing your existing login state; it only shows/hides that one window and never opens other pages on its own."
   },
   "window": {
     "analysis_scale": 0.5,

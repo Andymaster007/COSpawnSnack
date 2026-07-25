@@ -41,10 +41,6 @@
     "fullscreen": true,
     "browser_path": ""
   },
-  "media": {
-    "cdp_port": 9222,
-    "video_host": ""
-  },
   "window": {
     "analysis_scale": 0.5,
     "capture_fps": 15,

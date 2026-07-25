@@ -19,7 +19,7 @@ The whole process reads no memory and injects nothing into the game — it only 
 1. **Capture** — Uses **Windows Graphics Capture (WGC)** to capture the game window in the background (automatically falls back to BitBlt on older machines).
 2. **Detect death** — Runs **Windows.Media.Ocr** on the respawn prompt bar at the lower-center of the screen; reading "你将在下一回合重生" (You will respawn next round) is treated as death.
 3. **Detect round end** — Runs OCR on the center of the screen; reading "胜利 / 战败" (Victory / Defeat) is treated as round or match end.
-4. **Switch + resume** — On death it switches to the short-video page and keeps playing; on respawn / match end it switches back to the game and pauses the video at its exact position. Pause / resume reads the real playback state via system media control (GSMTC) and operates precisely, so it never fights with your manual pause.
+4. **Switch + resume** — On death it switches to the short-video page and keeps playing; on respawn / match end it switches back to the game and pauses the video at its exact position. Pause / resume is broadcast to every media session of that browser via system media control (GSMTC) without reading any playback state, so it never fights with your manual pause.
 
 ## Key Features
 
@@ -49,7 +49,7 @@ C++20 · MSVC · CMake · vcpkg · OpenCV · Win32 · Windows Graphics Capture �
 
 ## Version
 
-**v1.3** — Reworked how the video browser window is managed: lock a single window by its title suffix and reuse your everyday browser instance; switched show/hide to a topmost overlay (fixing the red/unresponsive taskbar icon); media keys now scan all of that browser's media sessions for more precise pause/resume; added usage prerequisites to the notes; start/stop hotkey is now Ctrl+F8 only; fixed: switching back now triggers only on Victory/Defeat, eliminating false switch-backs from plant-bomb banners.
+**v1.4** — Play/pause control now broadcasts to every media session of the browser: pause and resume are issued to all of the browser's media sessions without reading any playback state, so it never fights with your manual pause. Detection improved: the result ROI is enlarged and raised to cover the higher-placed victory/defeat screen, and capture FPS is raised from 10 to 15 for more stable end-of-round detection.
 
 Full changelog: [Releases](https://github.com/Andymaster007/COSpawnSnack/releases).
 

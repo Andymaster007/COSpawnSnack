@@ -39,15 +39,11 @@ std::wstring ToLower(std::wstring s) {
 } // namespace
 
 BrowserVideoTarget::BrowserVideoTarget(std::wstring url, bool fullscreen,
-                                         std::wstring browser_path,
-                                         int cdp_port,
-                                         std::string video_host)
+                                         std::wstring browser_path)
     : url_(std::move(url)),
       fullscreen_(fullscreen),
       browser_path_(std::move(browser_path)),
-      cdp_port_(cdp_port),
-      video_host_(std::move(video_host)),
-      media_(BrowserExeName(), cdp_port_, video_host_) {}
+      media_(BrowserExeName()) {}
 
 std::wstring BrowserVideoTarget::BrowserExeName() const {
     std::wstring exe = browser_path_.empty() ? std::wstring(L"chrome.exe")
@@ -93,9 +89,6 @@ std::wstring BrowserVideoTarget::BuildArgs() const {
     if (fullscreen_) a += L" --start-maximized";
     // No isolated profile: we reuse the user's everyday browser install.
     a += L" --no-first-run --no-default-browser-check";
-    // Enable the Chrome DevTools Protocol on a fixed port so we can drive
-    // play/pause directly (background / paused / live tabs GSMTC can't see).
-    a += L" --remote-debugging-port=" + std::to_wstring(cdp_port_);
     return a;
 }
 
