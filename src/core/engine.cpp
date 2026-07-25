@@ -164,7 +164,9 @@ void Engine::EnsureVideoTarget() {
         video_target_ = std::make_unique<BrowserVideoTarget>(
             Utf8ToWide(config_->companion_url),
             config_->companion_fullscreen,
-            Utf8ToWide(config_->companion_browser_path));
+            Utf8ToWide(config_->companion_browser_path),
+            config_->cdp_port,
+            config_->video_host);
         video_target_->SetErrorCallback([this](const std::string& m) { NotifyMessage(m); });
         video_url_ = config_->companion_url;
         video_browser_ = config_->companion_browser_path;

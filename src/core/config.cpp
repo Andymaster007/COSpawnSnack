@@ -37,7 +37,7 @@ bool LoadConfig(const fs::path& path, Config& out) {
 
         const auto& win = j.value("window", nlohmann::json::object());
         out.window_title_substring = win.value("title_substring", std::string{"使命召唤手游"});
-        out.capture_fps = win.value("capture_fps", 10);
+        out.capture_fps = win.value("capture_fps", 15);
         out.analysis_scale = win.value("analysis_scale", 0.5);
 
         const auto& resp = j.value("respawn", nlohmann::json::object());
@@ -68,6 +68,10 @@ bool LoadConfig(const fs::path& path, Config& out) {
         }
         out.companion_fullscreen = comp.value("fullscreen", true);
         out.companion_browser_path = comp.value("browser_path", std::string{"msedge.exe"});
+
+        const auto& media = j.value("media", nlohmann::json::object());
+        out.cdp_port = media.value("cdp_port", 9222);
+        out.video_host = media.value("video_host", std::string{""});
 
         const auto& foc = j.value("focus", nlohmann::json::object());
         out.focus_switch_back_delay_ms = foc.value("switch_back_delay_ms", 100);
@@ -108,6 +112,10 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
             {"url", cfg.companion_url},
             {"fullscreen", cfg.companion_fullscreen},
             {"browser_path", cfg.companion_browser_path}
+        };
+        j["media"] = {
+            {"cdp_port", cfg.cdp_port},
+            {"video_host", cfg.video_host}
         };
         j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};
         j["diagnostic_mode"] = cfg.diagnostic_mode;
@@ -152,6 +160,10 @@ nlohmann::json ConfigToJson(const Config& cfg) {
         {"url", cfg.companion_url},
         {"fullscreen", cfg.companion_fullscreen},
         {"browser_path", cfg.companion_browser_path}
+    };
+    j["media"] = {
+        {"cdp_port", cfg.cdp_port},
+        {"video_host", cfg.video_host}
     };
     j["focus"] = {{"switch_back_delay_ms", cfg.focus_switch_back_delay_ms}};
     j["diagnostic_mode"] = cfg.diagnostic_mode;

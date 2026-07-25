@@ -91,6 +91,7 @@ target_link_libraries(CODMSpawnSnack PRIVATE
     Gdi32
     Advapi32
     Comctl32
+    winhttp
 )
 
 target_compile_definitions(CODMSpawnSnack PRIVATE UNICODE _UNICODE NOMINMAX)

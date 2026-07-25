@@ -9,7 +9,7 @@ namespace csn {
 
 struct Config {
     std::string window_title_substring = "使命召唤手游";
-    int capture_fps = 10;
+    int capture_fps = 15;
     double analysis_scale = 0.5;
 
     // Respawn hint shown while spectating teammates after death in round-based
@@ -20,7 +20,7 @@ struct Config {
     int respawn_upscale_min_height = 160;
 
     // Result text shown at round / match end (胜利/战败 etc.). Detected via OCR.
-    RationalRect result_roi{0.30, 0.22, 0.70, 0.52};
+    RationalRect result_roi{0.22, 0.12, 0.78, 0.55};
     std::vector<std::string> result_keywords = {"胜利", "战败", "失败", "VICTORY", "DEFEAT"};
     double result_confidence_threshold = 0.6;
     // Before OCR, the result-text ROI is upscaled so its height reaches at
@@ -44,6 +44,15 @@ struct Config {
     // Explicit Chrome/Edge executable path. Empty -> "chrome.exe" on PATH with
     // common install-location fallbacks. Default is Edge (msedge.exe).
     std::string companion_browser_path = "msedge.exe";
+
+    // Chrome DevTools Protocol (CDP) control of the companion browser. The
+    // browser is launched with --remote-debugging-port=<cdp_port>, letting us
+    // drive play/pause directly via CDP (background / paused / live tabs that
+    // GSMTC cannot see). Falls back to GSMTC if the port is not reachable.
+    int cdp_port = 9222;
+    // If non-empty, only page tabs whose URL contains this substring (e.g.
+    // "bilibili.com") are controlled. Empty = control every page tab.
+    std::string video_host = "";
 
     int focus_switch_back_delay_ms = 100;
 

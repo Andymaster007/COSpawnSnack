@@ -18,10 +18,10 @@
     "upscale_min_height": 160
   },
   "result": {
-    "roi_left": 0.3,
-    "roi_top": 0.22,
-    "roi_right": 0.7,
-    "roi_bottom": 0.52,
+    "roi_left": 0.22,
+    "roi_top": 0.12,
+    "roi_right": 0.78,
+    "roi_bottom": 0.55,
     "keywords": [
       "胜利",
       "战败",
@@ -41,9 +41,13 @@
     "fullscreen": true,
     "browser_path": ""
   },
+  "media": {
+    "cdp_port": 9222,
+    "video_host": ""
+  },
   "window": {
     "analysis_scale": 0.5,
-    "capture_fps": 10,
+    "capture_fps": 15,
     "title_substring": "使命召唤手游"
   }
 }
