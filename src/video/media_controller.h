@@ -17,14 +17,15 @@ enum class PlaybackStatus {
 // Windows Global System Media Transport Controls (GSMTC) session manager.
 //
 // Because the browser is the user's everyday install, several media sessions
-// may exist in the same process (other tabs/pages). To pause precisely without
-// resuming an already-paused tab:
-//   - Pause(): scans ALL sessions of this browser and pauses every one that is
-//             currently Playing (already-paused sessions are never touched).
-//   - Play() : scans ALL sessions and resumes the FIRST one that is Paused;
-//             if none is paused, does nothing.
-// This keeps "pause" accurate; "resume" lands on the right tab only if the
-// user keeps a single playable page open (or by luck).
+// may exist in the same process (other tabs/pages). To control playback
+// without depending on the (sometimes stale/inaccurate) GSMTC status report:
+//   - Pause(): scans ALL sessions of this browser and sends TryPauseAsync to
+//              every one directly (idempotent; already-paused = no-op).
+//   - Play() : scans ALL sessions and sends TryPlayAsync to every one directly
+//              (idempotent; already-playing = no-op).
+// Both act on ALL media of this browser (the intended scope). This avoids
+// skipping a session whose GSMTC status is stale after the user pauses/plays
+// via the page's own controls.
 class MediaController {
 public:
     // browser_exe: e.g. "chrome.exe" or "msedge.exe" - used to pick the matching
@@ -32,9 +33,9 @@ public:
     explicit MediaController(std::wstring browser_exe);
     ~MediaController();
 
-    // Pause every Playing session (already-paused ones untouched).
+    // Pause every matching session directly (idempotent; safe on already-paused).
     void Pause();
-    // Resume only the first Paused session; do nothing if none is paused.
+    // Resume every matching session directly (idempotent; safe on already-playing).
     void Play();
 
     // Log the current playback status (so the user can verify state is read).

@@ -94,18 +94,18 @@ void MediaController::Pause() {
         CSN_LOG_INFO("MediaController::Pause: no media session found (nothing playing).");
         return;
     }
-    // Pause every session that is currently Playing. Already-paused sessions
-    // are never touched, so we never accidentally resume something the user
-    // paused manually. This keeps "pause" accurate even when several tabs in
-    // the browser are playing media.
+    // Pause EVERY matching session directly, WITHOUT checking playback status
+    // first. TryPauseAsync is idempotent: an already-paused session is a no-op,
+    // so acting on all of them is safe. The old guard ("only pause sessions
+    // currently Playing") depended on the GSMTC status report being accurate,
+    // but after the user pauses/plays via the page's own controls that report
+    // can be stale, causing us to skip a session that is in fact still playing.
+    // Pausing every session of the browser is exactly the intended scope.
     int paused = 0;
     for (const auto& s : sessions) {
         try {
-            PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
-            if (st == PlaybackStatus::Playing) {
-                s.TryPauseAsync().get();
-                ++paused;
-            }
+            s.TryPauseAsync().get();
+            ++paused;
         } catch (const winrt::hresult_error& e) {
             CSN_LOG_WARN("MediaController::Pause failed: code " +
                          std::to_string(static_cast<int>(e.code())));
@@ -114,7 +114,7 @@ void MediaController::Pause() {
         }
     }
     CSN_LOG_INFO("MediaController: Pause sent to " + std::to_string(paused) +
-                 " playing session(s) of " + std::to_string(sessions.size()) + " total.");
+                 " session(s) of " + std::to_string(sessions.size()) + " total.");
 }
 
 void MediaController::Play() {
@@ -124,18 +124,17 @@ void MediaController::Play() {
         CSN_LOG_INFO("MediaController::Play: no media session found (nothing to play).");
         return;
     }
-    // Resume only the FIRST session that is Paused; if none is paused (all are
-    // already playing or stopped), do nothing. This avoids resuming the wrong
-    // tab when several playable pages are open — landing on the right one
-    // depends on the user keeping a single playable page open (or luck).
+    // Resume EVERY matching session directly, WITHOUT checking playback status
+    // first. TryPlayAsync is idempotent (already-playing = no-op). The old
+    // "only resume the first Paused session" rule depended on the GSMTC status
+    // report being accurate, but after the user pauses/plays via the page's own
+    // controls that report can be stale, so we would wrongly skip the session.
+    // Acting on all matching sessions is the intended scope.
+    int played = 0;
     for (const auto& s : sessions) {
         try {
-            PlaybackStatus st = MapStatus(s.GetPlaybackInfo().PlaybackStatus());
-            if (st == PlaybackStatus::Paused) {
-                s.TryPlayAsync().get();
-                CSN_LOG_INFO("MediaController: sent Play (was Paused).");
-                return;
-            }
+            s.TryPlayAsync().get();
+            ++played;
         } catch (const winrt::hresult_error& e) {
             CSN_LOG_WARN("MediaController::Play failed: code " +
                          std::to_string(static_cast<int>(e.code())));
@@ -143,7 +142,8 @@ void MediaController::Play() {
             CSN_LOG_WARN("MediaController::Play threw an exception.");
         }
     }
-    CSN_LOG_INFO("MediaController::Play skipped (no paused session found).");
+    CSN_LOG_INFO("MediaController::Play sent to " + std::to_string(played) +
+                 " session(s) of " + std::to_string(sessions.size()) + " total.");
 }
 
 void MediaController::LogStatus(const char* context) {
